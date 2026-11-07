@@ -40,9 +40,16 @@ dotnet build src/NightLoop.Android -p:AndroidSdkDirectory=/path/to/android-sdk
 CI (`.github/workflows/build.yml`) builds a Release `.apk` on every push and pull request and attaches it to the
 run as `night-loop-android-apk`.
 
-## Installing a preview build
+## Releasing
 
-1. Download `night-loop-android-apk` from the latest successful **Build** run and unzip it.
-2. Open the `.apk` on your phone and allow installing from that source when Android asks.
+Actions › **Release** › Run workflow with a version like `0.1.0`. It needs `docs/releases/v<version>.md` for the
+notes, builds the `.apk` with that version and publishes a GitHub Release with `Night-loop-<version>.apk`.
+Set the secrets `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD` and `ANDROID_KEY_ALIAS` to sign with a
+permanent release key; without them releases are previews signed with a temporary key.
+
+## Installing
+
+1. On your phone, open the [latest release](https://github.com/Infinity7915/Night-loop-Android/releases) and download `Night-loop-<version>.apk`.
+2. Open it and allow installing from that source when Android asks.
 3. Open Night-loop and turn on each item in **Set up**. On Android 13 and newer, if the accessibility switch
    says it's restricted: Settings › Apps › Night-loop › ⋮ › **Allow restricted settings**, then try again.
