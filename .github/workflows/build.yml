@@ -1,0 +1,45 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: microsoft
+          java-version: '21'
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Install the .NET Android workload
+        run: dotnet workload install android
+
+      - name: Install Android SDK parts the build needs
+        run: >
+          dotnet build src/NightLoop.Android/NightLoop.Android.csproj -t:InstallAndroidDependencies
+          -p:AndroidSdkDirectory="$ANDROID_HOME" -p:AcceptAndroidSdkLicenses=True
+
+      - name: Build the .apk
+        run: >
+          dotnet publish src/NightLoop.Android/NightLoop.Android.csproj -c Release -f net10.0-android
+          -p:AndroidSdkDirectory="$ANDROID_HOME" -o out
+
+      # Preview builds are signed with the build's debug key. A real release key (kept as a GitHub secret)
+      # comes with the first public release; installing that one will need this preview uninstalled first.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: night-loop-android-apk
+          path: out/*-Signed.apk
+          if-no-files-found: error
