@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Night theme, the PC app's default dark purple. -->
+  <color name="nl_background">#FF0F0B1A</color>
+  <color name="nl_surface">#FF1A1430</color>
+  <color name="nl_border">#FF2E2550</color>
+  <color name="nl_accent">#FFA78BFA</color>
+  <color name="nl_text">#FFEDE9FE</color>
+  <color name="nl_text_quiet">#FFA59BC4</color>
+  <color name="nl_good">#FF4ADE80</color>
+  <color name="nl_warn">#FFFBBF24</color>
+</resources>

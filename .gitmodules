@@ -1,0 +1,3 @@
+[submodule "external/night-loop"]
+	path = external/night-loop
+	url = https://github.com/Infinity7915/Night-loop.git

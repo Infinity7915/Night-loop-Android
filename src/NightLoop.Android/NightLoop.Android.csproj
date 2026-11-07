@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-android</TargetFramework>
+    <!-- Android 8.0: gestures that continue (camera swipes) need API 26. -->
+    <SupportedOSPlatformVersion>26</SupportedOSPlatformVersion>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>NightLoop.Mobile</RootNamespace>
+    <ApplicationId>win.nightloop.app</ApplicationId>
+    <ApplicationTitle>Night-loop</ApplicationTitle>
+    <!-- versionCode must go up with every release; versionName is what people see. -->
+    <ApplicationVersion>1</ApplicationVersion>
+    <ApplicationDisplayVersion>0.1.0</ApplicationDisplayVersion>
+    <AndroidPackageFormat>apk</AndroidPackageFormat>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Shared with the PC app and the server: macro rules, API client, macro engine core. -->
+    <ProjectReference Include="..\..\external\night-loop\src\NightLoop.Contracts\NightLoop.Contracts.csproj" />
+    <ProjectReference Include="..\..\external\night-loop\src\NightLoop.Client\NightLoop.Client.csproj" />
+    <ProjectReference Include="..\..\external\night-loop\src\NightLoop.Engine\NightLoop.Engine.csproj" />
+  </ItemGroup>
+</Project>

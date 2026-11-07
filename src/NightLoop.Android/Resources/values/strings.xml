@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="app_name">Night-loop</string>
+  <string name="accessibility_summary">Plays your Night-loop macros: taps and swipes on the screen.</string>
+  <string name="accessibility_description">Night-loop uses this service to perform the taps, swipes and Back/Home presses that your macros contain, only while a macro you started is playing, and to notice which app is open for "Wait for app" blocks. It does not read your screen\'s text or collect personal data through this service.</string>
+</resources>
