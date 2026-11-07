@@ -1,0 +1,11 @@
+bin/
+obj/
+.vs/
+.vscode/
+.idea/
+*.user
+out/
+# Signing keys and secrets never go in the repo
+*.keystore
+*.jks
+.env
