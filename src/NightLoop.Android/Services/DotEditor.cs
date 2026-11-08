@@ -102,6 +102,8 @@ internal sealed class DotEditor
     private Button? _playButton;
     private View? _card;
     private View? _list;
+    private ScrollView? _listScroll;
+    private readonly List<View> _listRows = [];
     private int? _listX, _listY;
     private bool _isPlaying;
     private bool _starting; // Play was pressed and the start delay is running
@@ -670,6 +672,7 @@ internal sealed class DotEditor
         rows.Tag = "rows";
         var scroll = new ScrollView(C);
         scroll.AddView(rows);
+        _listScroll = scroll;
         panel.AddView(scroll, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent));
         var width = Math.Min(Px(380), metrics.WidthPixels - Px(16));
         var layout = new WindowManagerLayoutParams(width, Math.Min(Px(520), metrics.HeightPixels * 2 / 3), WindowManagerTypes.ApplicationOverlay,
@@ -691,6 +694,7 @@ internal sealed class DotEditor
     {
         if (_list?.FindViewWithTag("rows") is not LinearLayout rows) return;
         rows.RemoveAllViews();
+        _listRows.Clear();
         if (_steps.Count == 0)
         {
             rows.AddView(Ui.Text(C, "No steps yet. + adds a tap, ⊕ any block.", 14, Palette.TextQuiet));
@@ -704,20 +708,41 @@ internal sealed class DotEditor
             if (type is BlockTypes.End or BlockTypes.Else) depth = Math.Max(0, depth - 1);
             var row = Ui.Row(C);
             row.SetPadding(Px(6 + 14 * depth), Px(4), 0, Px(4));
-            if (step == _selected) row.Background = Ui.Rounded(C, Palette.SurfaceHigh, 8, Palette.Accent);
+            PaintRow(row, step);
             var text = Ui.Text(C, $"{i + 1}. {Describe(step)}", 14, step.Enabled ? Palette.Text : Palette.TextQuiet);
             row.AddView(Ui.Fill(text));
             row.AddView(Ui.Small(C, "↑", () => Move(step, -1), "Move earlier"));
             row.AddView(Ui.Small(C, "↓", () => Move(step, 1), "Move later"));
             row.Click += (_, _) =>
             {
+                if (_isPlaying) return; // the list just follows along while a macro plays
                 CloseList();
                 Select(step);
             };
             row.LongClick += (_, _) => More(step);
             rows.AddView(row);
+            _listRows.Add(row);
             if (type is BlockTypes.If or BlockTypes.Loop or BlockTypes.RepeatUntil or BlockTypes.Else) depth++;
         }
+    }
+
+    private void PaintRow(View row, Step step)
+    {
+        row.Background = step == _playing && _isPlaying && LocalSettings.FollowPlayingStep
+            ? Ui.Rounded(C, Color.Argb(90, 34, 160, 90), 8, Palette.Good)
+            : step == _selected ? Ui.Rounded(C, Palette.SurfaceHigh, 8, Palette.Accent) : null;
+    }
+
+    /// <summary>Highlights the playing step's row in the ☰ list and scrolls it to the middle (only those rows change).</summary>
+    private void FollowInList(Step? before, Step? now)
+    {
+        if (_list is null || !LocalSettings.FollowPlayingStep) return;
+        if (before is not null && _steps.IndexOf(before) is var b and >= 0 && b < _listRows.Count) PaintRow(_listRows[b], before);
+        if (now is null || _steps.IndexOf(now) is not (var i and >= 0) || i >= _listRows.Count) return;
+        var row = _listRows[i];
+        PaintRow(row, now);
+        if (_listScroll is { } scroll)
+            scroll.SmoothScrollTo(0, Math.Max(0, row.Top + row.Height / 2 - scroll.Height / 2));
     }
 
     private string Describe(Step step)
@@ -767,6 +792,8 @@ internal sealed class DotEditor
         Core.Overlays.Untrack(_list);
         if (_list is not null) _windows.RemoveView(_list);
         _list = null;
+        _listScroll = null;
+        _listRows.Clear();
     }
 
     // ---- Cards ----
@@ -1126,8 +1153,20 @@ internal sealed class DotEditor
             if (!_closed) SetPlaying(false);
         });
 
-        void OnStep(MacroRun r, int index) => Night.OnMain(() =>
+        // Only the newest step is shown: if the screen falls behind, older updates are dropped instead of
+        // queueing up and flashing through many dots at once.
+        var latest = -1;
+        var queued = 0;
+        void OnStep(MacroRun r, int index)
         {
+            Volatile.Write(ref latest, index);
+            if (Interlocked.Exchange(ref queued, 1) == 0) Night.OnMain(() => Show(r));
+        }
+
+        void Show(MacroRun r)
+        {
+            Volatile.Write(ref queued, 0);
+            var index = Volatile.Read(ref latest);
             var block = index >= 0 && index < r.Macro.Steps.Length ? r.Macro.Steps[index].Block : null;
             var now = block is not null && _byBlockId.TryGetValue(block.Id, out var step) ? step : null;
             if (now == _playing) return;
@@ -1137,8 +1176,9 @@ internal sealed class DotEditor
             _playing = now;
             if (before is not null && _steps.Contains(before)) Paint(before);
             if (now is not null) Paint(now);
+            FollowInList(before, now);
             ShowStatus();
-        });
+        }
     }
 
     /// <summary>The bubble's "Hide while playing" switches changed: apply them now if this macro is playing.</summary>
@@ -1165,7 +1205,6 @@ internal sealed class DotEditor
             // An open card holds the keyboard focus, so the game's window isn't focused and swallows the first
             // tap just to take focus back. Close it before the macro starts.
             CloseCard();
-            CloseList();
         }
         foreach (var step in _steps)
             foreach (var (view, layout) in step.Windows())

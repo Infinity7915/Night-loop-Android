@@ -87,7 +87,19 @@ internal sealed class AccessibilityTouch : ITouchSender
         return done.Task;
     }
 
+    /// <summary>Taps sent back to back with no gap can land together (games read them as one burst).</summary>
+    private const int MinGapMs = 40;
+    private static long _lastEnd;
+
     private static async Task SendAsync(Path path, int durationMs, CancellationToken ct)
+    {
+        var since = Environment.TickCount64 - Interlocked.Read(ref _lastEnd);
+        if (since < MinGapMs) await Task.Delay((int)(MinGapMs - since), ct);
+        try { await SendOnceAsync(path, durationMs, ct); }
+        finally { Interlocked.Exchange(ref _lastEnd, Environment.TickCount64); }
+    }
+
+    private static async Task SendOnceAsync(Path path, int durationMs, CancellationToken ct)
     {
         var duration = Math.Clamp(durationMs, 1, (int)GestureDescription.MaxGestureDuration);
         var gesture = new GestureDescription.Builder()

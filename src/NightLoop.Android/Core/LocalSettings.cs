@@ -41,6 +41,13 @@ internal static class LocalSettings
         set => _prefs?.Edit()!.PutBoolean("hide_dots_playing", value)!.Apply();
     }
 
+    /// <summary>Settings switch: while a macro plays with the ☰ step list open, the playing step is highlighted and kept centered.</summary>
+    public static bool FollowPlayingStep
+    {
+        get => _prefs?.GetBoolean("follow_playing_step", true) ?? true;
+        set => _prefs?.Edit()!.PutBoolean("follow_playing_step", value)!.Apply();
+    }
+
     /// <summary>Bubble switch: the play bar (toolbar) disappears while a macro plays. Stop it from the bubble.</summary>
     public static bool HidePlayBarWhilePlaying
     {
