@@ -223,7 +223,7 @@ public sealed class BubbleService : Service
             row.AddView(Ui.Fill(name));
             row.AddView(running
                 ? Ui.Small(this, "■", () => Night.Stop(id), $"Stop {macro.Name}")
-                : Ui.Small(this, "▶", () => _ = PlayAsync(id), $"Play {macro.Name}"));
+                : Ui.Small(this, "▶", () => _ = ShowStepsAsync(id), $"Show {macro.Name}'s steps"));
             _panelList.AddView(row);
         }
         _panelList.AddView(Switch("Hide dots while playing", LocalSettings.HideDotsWhilePlaying, on => LocalSettings.HideDotsWhilePlaying = on));
@@ -299,18 +299,11 @@ public sealed class BubbleService : Service
         }
     }
 
-    /// <summary>Plays with the macro's steps on screen (see-through, the playing one lit), or plainly when it has none.</summary>
-    private async Task PlayAsync(Guid id)
+    /// <summary>▶ in the list: puts the macro's steps on screen without playing; the play bar's ▶ plays it.</summary>
+    private async Task ShowStepsAsync(Guid id)
     {
-        ClosePanel(); // out of the way of the taps
-        if (_editor?.MacroId != id) await EditAsync(id, quiet: true);
-        if (_editor?.MacroId == id)
-        {
-            await _editor.TogglePlayAsync();
-            return;
-        }
-        var error = await Night.PlayAsync(id);
-        if (error is not null) Night.OnMain(() => Ui.Toast(this, error));
+        ClosePanel();
+        if (_editor?.MacroId != id) await EditAsync(id);
     }
 
     private void ClosePanel()
