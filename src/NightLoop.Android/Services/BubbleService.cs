@@ -197,10 +197,25 @@ public sealed class BubbleService : Service
                 : Ui.Small(this, "▶", () => _ = PlayAsync(id), $"Play {macro.Name}"));
             _panelList.AddView(row);
         }
+        _panelList.AddView(Switch("Hide dots while playing", LocalSettings.HideDotsWhilePlaying, on => LocalSettings.HideDotsWhilePlaying = on));
+        _panelList.AddView(Switch("Hide play bar while playing", LocalSettings.HidePlayBarWhilePlaying, on => LocalSettings.HidePlayBarWhilePlaying = on));
         var actions = Ui.Row(this);
         actions.AddView(Ui.Button(this, "+ New macro", () => _ = NewMacroAsync()));
         if (Night.AnyRunning) actions.AddView(Ui.Button(this, "Stop all", Night.StopAll, primary: false));
         _panelList.AddView(actions);
+    }
+
+    private View Switch(string text, bool value, Action<bool> set)
+    {
+        var sw = new global::Android.Widget.Switch(this) { Text = text, Checked = value };
+        sw.SetTextColor(Palette.Text);
+        sw.SetPadding(0, Palette.Dp(this, 6), 0, Palette.Dp(this, 6));
+        sw.CheckedChange += (_, e) =>
+        {
+            set(e.IsChecked);
+            _editor?.ApplyHideSettings();
+        };
+        return sw;
     }
 
     // ---- Dot editor ----

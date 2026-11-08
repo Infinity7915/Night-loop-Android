@@ -945,7 +945,7 @@ internal sealed class DotEditor
             Gravity = GravityFlags.Top | GravityFlags.Start,
             X = Math.Clamp(x, Px(8), Math.Max(Px(8), metrics.WidthPixels - width - Px(8))),
             Y = Math.Clamp(y, Px(8), Math.Max(Px(8), metrics.HeightPixels - Px(420))),
-            SoftInputMode = SoftInput.AdjustPan | SoftInput.StateHidden,
+            SoftInputMode = SoftInput.AdjustPan | SoftInput.StateUnspecified,
         };
         _windows.AddView(scroll, layout);
         _card = scroll;
@@ -1062,6 +1062,9 @@ internal sealed class DotEditor
             return;
         }
         Changed();
+        // Close the card first: it holds the keyboard focus, and the game would spend the first tap taking it back.
+        CloseCard();
+        CloseList();
         var copy = MacroJson.Deserialize(MacroJson.Serialize(_doc));
         if (await Night.PlayAsync(_id, copy) is { } error)
         {
@@ -1087,6 +1090,14 @@ internal sealed class DotEditor
         });
     }
 
+    /// <summary>The bubble's "Hide while playing" switches changed: apply them now if this macro is playing.</summary>
+    public void ApplyHideSettings()
+    {
+        if (!_isPlaying) return;
+        _isPlaying = false;
+        SetPlaying(true);
+    }
+
     private void OnRunsChanged()
     {
         if (_isPlaying && !Night.IsRunning(_id)) SetPlaying(false);
@@ -1097,20 +1108,29 @@ internal sealed class DotEditor
         if (_isPlaying == playing) return;
         _isPlaying = playing;
         _playing = null;
-        if (playing) _selected = null;
+        if (playing)
+        {
+            _selected = null;
+            // An open card holds the keyboard focus, so the game's window isn't focused and swallows the first
+            // tap just to take focus back. Close it before the macro starts.
+            CloseCard();
+            CloseList();
+        }
         foreach (var step in _steps)
             foreach (var (view, layout) in step.Windows())
-                PassThrough(view, layout, playing);
+                PassThrough(view, layout, playing, LocalSettings.HideDotsWhilePlaying);
+        if (_toolbar is not null && _toolbarLayout is not null)
+            PassThrough(_toolbar, _toolbarLayout, playing && LocalSettings.HidePlayBarWhilePlaying, hide: true);
         if (_playButton is not null) _playButton.Text = playing ? "■" : "▶";
         PaintAll();
     }
 
     /// <summary>While playing, steps stay visible but see-through and untouchable, so the taps reach the game.</summary>
-    private void PassThrough(View view, WindowManagerLayoutParams layout, bool on)
+    private void PassThrough(View view, WindowManagerLayoutParams layout, bool on, bool hide = false)
     {
         if (on) layout.Flags |= WindowManagerFlags.NotTouchable;
         else layout.Flags &= ~WindowManagerFlags.NotTouchable;
-        layout.Alpha = on ? PlayingAlpha : 1f;
+        layout.Alpha = on ? (hide ? 0f : PlayingAlpha) : 1f;
         if (view.IsAttachedToWindow) _windows.UpdateViewLayout(view, layout);
     }
 

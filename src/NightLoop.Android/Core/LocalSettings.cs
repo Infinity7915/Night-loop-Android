@@ -33,4 +33,18 @@ internal static class LocalSettings
         get => Math.Clamp(_prefs?.GetInt("start_delay_ms", StartDelayDefaultMs) ?? StartDelayDefaultMs, 0, StartDelayMaxMs);
         set => _prefs?.Edit()!.PutInt("start_delay_ms", Math.Clamp(value, 0, StartDelayMaxMs))!.Apply();
     }
+
+    /// <summary>Bubble switch: the numbered dots disappear while a macro plays (they come back when it stops).</summary>
+    public static bool HideDotsWhilePlaying
+    {
+        get => _prefs?.GetBoolean("hide_dots_playing", false) ?? false;
+        set => _prefs?.Edit()!.PutBoolean("hide_dots_playing", value)!.Apply();
+    }
+
+    /// <summary>Bubble switch: the play bar (toolbar) disappears while a macro plays. Stop it from the bubble.</summary>
+    public static bool HidePlayBarWhilePlaying
+    {
+        get => _prefs?.GetBoolean("hide_bar_playing", false) ?? false;
+        set => _prefs?.Edit()!.PutBoolean("hide_bar_playing", value)!.Apply();
+    }
 }
