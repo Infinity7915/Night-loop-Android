@@ -53,6 +53,29 @@ internal static class Overlays
         return changed;
     }
 
+    /// <summary>
+    /// Main thread only. Hides every Night-loop window (bubble, play bar, step dots and chips) so a picture or color
+    /// taken from the screen doesn't include them. Give the list back to <see cref="ShowAgain"/>.
+    /// </summary>
+    public static List<View> HideAll()
+    {
+        List<Entry> snapshot;
+        lock (All) snapshot = [.. All];
+        var hidden = new List<View>();
+        foreach (var e in snapshot)
+        {
+            if (!e.View.IsAttachedToWindow || e.View.Visibility != ViewStates.Visible) continue;
+            e.View.Visibility = ViewStates.Invisible;
+            hidden.Add(e.View);
+        }
+        return hidden;
+    }
+
+    public static void ShowAgain(List<View> hidden)
+    {
+        foreach (var v in hidden) v.Visibility = ViewStates.Visible;
+    }
+
     /// <summary>Main thread only. Makes the windows from <see cref="LetThrough"/> touchable again.</summary>
     public static void Restore(List<Entry> changed)
     {

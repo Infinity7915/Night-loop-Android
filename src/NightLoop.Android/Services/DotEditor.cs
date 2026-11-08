@@ -184,7 +184,7 @@ internal sealed class DotEditor
                     Key = b.GetString("key", "Enter"),
                     KeyHoldMs = b.GetInt("holdMs", 50),
                 },
-                BlockTypes.Swipe or BlockTypes.SwipeHold => new Step { Kind = Kind.Swipe, Block = Copy(b) },
+                BlockTypes.Swipe or BlockTypes.SwipeHold or BlockTypes.SwipeScan or BlockTypes.WalkTo => new Step { Kind = Kind.Swipe, Block = Copy(b) },
                 // Hold key and everything else keep their block as it is.
                 _ => new Step { Kind = Kind.Other, Block = Copy(b) },
             };
@@ -279,7 +279,10 @@ internal sealed class DotEditor
         };
         var repeat = _doc.Options.Repeat.Mode == RepeatModes.Forever ? "repeats forever" : $"plays {_doc.Options.Repeat.Count ?? 1}×";
         var selected = _selected is null ? "" : $" · step {_steps.IndexOf(_selected) + 1} selected";
-        _status.Text = _issue is null ? $"{_steps.Count} steps · {repeat} · {state}{selected}" : $"⚠ {_issue}";
+        // The app's editor lists the wait after each tap as its own block; say so, so the two counts add up.
+        var afterWaits = _steps.Count(s => s.Kind == Kind.Touch && s.WaitMs > 0);
+        var count = afterWaits > 0 ? $"{_steps.Count} steps ({_steps.Count + afterWaits} blocks in the app, with waits after taps)" : $"{_steps.Count} steps";
+        _status.Text = _issue is null ? $"{count} · {repeat} · {state}{selected}" : $"⚠ {_issue}";
         _status.SetTextColor(_issue is null ? Palette.TextQuiet : Palette.Warn);
     }
 
@@ -300,12 +303,11 @@ internal sealed class DotEditor
             (step.View, step.Layout) = MakeWindow(step, Px(DotDp), Px(DotDp), centerX - Px(DotDp) / 2, centerY - Px(DotDp) / 2, end: false);
         else
         {
-            // Chips line up down the left side in columns, out of the way; drag them anywhere.
-            var metrics = C.Resources!.DisplayMetrics!;
-            var perColumn = Math.Max(4, (metrics.HeightPixels - Px(230)) / Px(44));
-            var chips = _steps.Count(s => s.Kind is not (Kind.Touch or Kind.Swipe) && s != step && s.View is not null);
-            var x = Px(8) + chips / perColumn * Px(170);
-            var y = Px(150) + chips % perColumn * Px(44);
+            // A chip comes back where it was last left (unless Settings › Arrange steps is on). Otherwise chips line
+            // up down the left side in columns, out of the way; drag them anywhere.
+            var (x, y) = !Core.LocalSettings.ArrangeSteps && step.Id is { Length: > 0 } && Core.LocalSettings.ChipSpot(_id, step.Id) is { } saved
+                ? ClampToScreen(saved)
+                : ChipSlot(_steps.Count(s => s.Kind is not (Kind.Touch or Kind.Swipe) && s != step && s.View is not null));
             (step.View, step.Layout) = MakeWindow(step, ViewGroup.LayoutParams.WrapContent, Px(36), x, y, end: false);
             step.View.SetPadding(Px(12), 0, Px(12), 0);
             step.View.SetMaxWidth(Px(240));
@@ -318,6 +320,26 @@ internal sealed class DotEditor
             _windows.AddView(view, layout);
             Core.Overlays.Track(view, layout, _windows); // a tap under this dot goes to the app, not the dot
         }
+    }
+
+    /// <summary>
+    /// The n-th chip's tidy spot: columns down the left side. Columns that wouldn't fit across the screen start over
+    /// from the left a little lower, so every chip stays on screen (past ~30 steps they used to land off the edge).
+    /// </summary>
+    private (int X, int Y) ChipSlot(int n)
+    {
+        var metrics = C.Resources!.DisplayMetrics!;
+        var perColumn = Math.Max(4, (metrics.HeightPixels - Px(230)) / Px(44));
+        var columns = Math.Max(1, (metrics.WidthPixels - Px(16)) / Px(170));
+        var column = n / perColumn;
+        var layer = column / columns; // a full screen of columns: start a new layer, nudged down and right
+        return (Px(8) + column % columns * Px(170) + layer * Px(14), Px(150) + n % perColumn * Px(44) + layer * Px(22));
+    }
+
+    private (int X, int Y) ClampToScreen((int X, int Y) p)
+    {
+        var metrics = C.Resources!.DisplayMetrics!;
+        return (Math.Clamp(p.X, 0, Math.Max(0, metrics.WidthPixels - Px(60))), Math.Clamp(p.Y, 0, Math.Max(0, metrics.HeightPixels - Px(40))));
     }
 
     private (TextView, WindowManagerLayoutParams) MakeWindow(Step step, int width, int height, int x, int y, bool end)
@@ -358,7 +380,13 @@ internal sealed class DotEditor
             _ => $"{number} {Icon(step.Block!)} {Summary(step.Block!)}{off}",
         };
         // Start and end of a swipe look different: green ▶ start, red ■ end (✋ when it holds there).
-        if (step.EndView is not null) step.EndView.Text = step.Block?.Type == BlockTypes.SwipeHold ? $"✋{number}" : $"■{number}";
+        if (step.EndView is not null) step.EndView.Text = step.Block?.Type switch
+        {
+            BlockTypes.SwipeHold => $"✋{number}",
+            BlockTypes.SwipeScan => $"🔍{number}",
+            BlockTypes.WalkTo => $"🚶{number}",
+            _ => $"■{number}",
+        };
         var fill = step.Kind switch
         {
             Kind.Touch => Color.Argb(210, 124, 92, 246),
@@ -459,9 +487,13 @@ internal sealed class DotEditor
         Insert(swipe);
         AddView(swipe, x, y);
         Changed();
-        Ui.Toast(C, block.Type == BlockTypes.SwipeHold
-            ? "Drag the dots: green ▶ is where the swipe starts, red ■ is where it ends and keeps holding. Tap a dot to set how long to hold or what to wait for."
-            : "Drag the dots: green ▶ is where the swipe starts, red ■ is where it ends.");
+        Ui.Toast(C, block.Type switch
+        {
+            BlockTypes.SwipeHold => "Drag the dots: green ▶ is where the swipe starts, red ✋ is where it ends and keeps holding. Tap a dot to set how long to hold or what to wait for.",
+            BlockTypes.SwipeScan => "Drag the dots: green ▶ is where the swipe starts, red 🔍 where it ends. Tap a dot to pick what to look for.",
+            BlockTypes.WalkTo => "Put green ▶ on the middle of the joystick and red 🚶 where you push it to walk forward. Tap a dot to pick the picture to walk to.",
+            _ => "Drag the dots: green ▶ is where the swipe starts, red ■ is where it ends.",
+        });
     }
 
     private void AddWait()
@@ -523,7 +555,7 @@ internal sealed class DotEditor
                 case BlockTypes.Type: AddKey("type"); return;
             }
             var block = Block.Create(NextId(), kind.Type, kind.Defaults());
-            if (kind.Type is BlockTypes.Swipe or BlockTypes.SwipeHold)
+            if (kind.Type is BlockTypes.Swipe or BlockTypes.SwipeHold or BlockTypes.SwipeScan or BlockTypes.WalkTo)
             {
                 AddSwipe(block);
                 return;
@@ -1309,7 +1341,9 @@ internal sealed class DotEditor
                     if (step is null) return true;
                     if (_moved)
                     {
-                        if (step.Kind is Kind.Touch or Kind.Swipe) editor.Changed(); // a chip's place isn't saved
+                        if (step.Kind is Kind.Touch or Kind.Swipe) editor.Changed();
+                        // A chip's place isn't part of the macro: keep it on this phone so it comes back there.
+                        else if (step.Id is { Length: > 0 } id) Core.LocalSettings.SaveChipSpot(editor._id, id, layout.X, layout.Y);
                     }
                     else editor.Select(step);
                     return true;

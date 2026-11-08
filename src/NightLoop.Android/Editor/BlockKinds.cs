@@ -7,6 +7,12 @@ namespace NightLoop.Mobile.Editor;
 internal abstract record Field(string Key, string Label);
 /// <summary>A whole number. Blank removes it (the block's default), unless <see cref="Required"/>.</summary>
 internal sealed record IntField(string Key, string Label, string Hint, bool Required = false) : Field(Key, Label);
+/// <summary>
+/// A time typed in seconds (decimals allowed) and stored in ms. Blank stores 0 = Infinite (or, with
+/// <see cref="BlankIsInfinite"/> off, removes it so the block's default applies). People typed "10" into the old
+/// ms boxes meaning 10 seconds, so the wait gave up after 10 ms and went on at once.
+/// </summary>
+internal sealed record SecondsField(string Key, string Label, bool BlankIsInfinite = true, string Hint = "Infinite") : Field(Key, Label);
 /// <summary>A spot on the screen: x and y at the top level (Key "") or inside an object (from / to).</summary>
 internal sealed record SpotField(string Key, string Label) : Field(Key, Label);
 internal sealed record ChoiceField(string Key, string Label, (string Value, string Text)[] Choices) : Field(Key, Label);
@@ -40,23 +46,27 @@ internal static class BlockKinds
     [
         new TextField("text", "Text to look for"), new ChoiceField("match", "Match", Matches),
         new BoolField("matchCase", "Match capital letters", false),
-        new IntField("timeoutMs", "Give up after (ms, blank = Infinite)", "Infinite"),
+        new SecondsField("timeoutMs", "Give up after (seconds, blank = Infinite)"),
         new ChoiceField("onFail", "If it gives up", OnFails), new TextField("failLabel", "Label to go to (for Go to a label)"),
     ];
+
+    private static readonly (string, string)[] Targets = [("image", "A picture"), ("text", "Text")];
+    private static readonly (string, string)[] WhenFound = [("none", "Just go on"), ("tap", "Tap it, then go on")];
+    private static Field[] Tapping(Field[] fields) => [.. fields, new ChoiceField("whenFound", "When found", WhenFound)];
 
     private static Field[] PictureFields =>
     [
         new PictureField(), new IntField("confidencePct", "Confidence % (1–100)", "90"),
         new IntField("sizeTolerancePct", "Size tolerance % (blank = automatic)", "auto"),
         new BoolField("matchColor", "Match colors", true),
-        new IntField("timeoutMs", "Give up after (ms, blank = Infinite)", "Infinite"),
+        new SecondsField("timeoutMs", "Give up after (seconds, blank = Infinite)"),
         new ChoiceField("onFail", "If it gives up", OnFails), new TextField("failLabel", "Label to go to (for Go to a label)"),
     ];
 
     private static Field[] PixelFields =>
     [
         new PixelField(), new IntField("tolerance", "Color tolerance (0–255)", "10"),
-        new IntField("timeoutMs", "Give up after (ms, blank = Infinite)", "Infinite"),
+        new SecondsField("timeoutMs", "Give up after (seconds, blank = Infinite)"),
         new ChoiceField("onFail", "If it gives up", OnFails), new TextField("failLabel", "Label to go to (for Go to a label)"),
     ];
 
@@ -77,8 +87,30 @@ internal static class BlockKinds
             [new SpotField("from", "Start"), new SpotField("to", "End (the finger stays down here)"), new IntField("durationMs", "Swipe time (ms)", "300"),
              new IntField("holdMs", "Hold time (ms), when there's no check", "1000"),
              new ConditionField(Optional: true, Title: "Keep holding until"),
-             new IntField("timeoutMs", "With a check: let go after (ms, blank = Infinite)", "Infinite")],
+             new SecondsField("timeoutMs", "With a check: let go after (seconds, blank = Infinite)")],
             b => b.GetObject("condition") is { } c ? $"Swipe and hold until {DescribeCondition(c)}" : $"Swipe and hold {b.GetInt("holdMs", 1000)} ms"),
+        new(BlockTypes.SwipeScan, "Swipe and scan", "Touch",
+            () => new() { ["from"] = new JsonObject { ["x"] = 800, ["y"] = 900 }, ["to"] = new JsonObject { ["x"] = 500, ["y"] = 900 }, ["durationMs"] = 300,
+                          ["target"] = "image", ["confidencePct"] = 90, ["maxTurns"] = 12, ["whenFound"] = "none" },
+            [new SpotField("from", "Swipe start"), new SpotField("to", "Swipe end"), new IntField("durationMs", "Swipe time (ms)", "300"),
+             new ChoiceField("target", "Look for", Targets), new PictureField(), new TextField("value", "Text to look for (when looking for text)"),
+             new IntField("confidencePct", "Confidence % (1–100)", "90"), new BoolField("matchColor", "Match colors", true),
+             new IntField("maxTurns", "Most swipes before giving up", "12"),
+             new ChoiceField("whenFound", "When found", WhenFound),
+             new ChoiceField("onFail", "If it gives up", OnFails), new TextField("failLabel", "Label to go to (for Go to a label)")],
+            b => $"Swipe until {Looking(b)} shows{Tap(b)}"),
+        new(BlockTypes.WalkTo, "Walk to picture", "Touch",
+            () => new() { ["from"] = new JsonObject { ["x"] = 300, ["y"] = 1700 }, ["to"] = new JsonObject { ["x"] = 300, ["y"] = 1500 },
+                          ["target"] = "image", ["confidencePct"] = 90, ["tolerancePx"] = 200, ["timeoutMs"] = 30_000, ["whenFound"] = "none" },
+            [new SpotField("from", "Joystick middle"), new SpotField("to", "Joystick pushed forward"),
+             new ChoiceField("target", "Walk to", Targets), new PictureField(), new TextField("value", "Text to walk to (when walking to text)"),
+             new IntField("confidencePct", "Confidence % (1–100)", "90"), new BoolField("matchColor", "Match colors", true),
+             new IntField("tolerancePx", "Arrived when it's this close to the middle of the screen (px)", "200"),
+             new ConditionField(Optional: true, Title: "Or stop walking when"),
+             new SecondsField("timeoutMs", "Give up after (seconds, blank = Infinite)"),
+             new ChoiceField("whenFound", "When there", [("none", "Just go on"), ("tap", "Tap it, then go on")]),
+             new ChoiceField("onFail", "If it gives up", OnFails), new TextField("failLabel", "Label to go to (for Go to a label)")],
+            b => $"Walk to {Looking(b)}{Tap(b)}"),
         new(BlockTypes.DeviceButton, "Phone button", "Touch", () => new() { ["button"] = "back" },
             [new ChoiceField("button", "Button", Buttons)],
             b => $"Press {Text(Buttons, b.GetString("button", "back"))}"),
@@ -102,10 +134,10 @@ internal static class BlockKinds
             b => $"Type \"{b.GetString("text", "")}\""),
 
         new(BlockTypes.AppOpen, "Open app", "Apps", () => new() { ["package"] = "" },
-            [new AppField("package", "App"), new BoolField("wait", "Wait until it's in front", true), new IntField("timeoutMs", "Give up after (ms, 0 = Infinite)", "30000")],
+            [new AppField("package", "App"), new BoolField("wait", "Wait until it's in front", true), new SecondsField("timeoutMs", "Give up after (seconds, 0 = Infinite)", BlankIsInfinite: false, Hint: "30")],
             b => $"Open {AppName(b.GetString("package"))}"),
         new(BlockTypes.WaitForApp, "Wait for app", "Apps", () => new() { ["package"] = "" },
-            [new AppField("package", "App"), new IntField("timeoutMs", "Give up after (ms, blank = Infinite)", "Infinite")],
+            [new AppField("package", "App"), new SecondsField("timeoutMs", "Give up after (seconds, blank = Infinite)")],
             b => $"Wait for {AppName(b.GetString("package"))}"),
 
         new(BlockTypes.Wait, "Wait", "Timing", () => new() { ["ms"] = 500 },
@@ -116,15 +148,15 @@ internal static class BlockKinds
             b => $"Wait {b.GetInt("minMs", 0)}–{b.GetInt("maxMs", 0)} ms"),
 
         new(BlockTypes.WaitForText, "Wait for text", "Screen", () => new() { ["text"] = "", ["match"] = "contains", ["timeoutMs"] = 10_000 },
-            TextFields, b => $"Wait for \"{b.GetString("text", "")}\""),
+            Tapping(TextFields), b => $"Wait for \"{b.GetString("text", "")}\"{Tap(b)}"),
         new(BlockTypes.WaitForTextGone, "Wait until text is gone", "Screen", () => new() { ["text"] = "", ["match"] = "contains", ["timeoutMs"] = 10_000 },
             TextFields, b => $"Wait until \"{b.GetString("text", "")}\" is gone"),
         new(BlockTypes.WaitForImage, "Wait for picture", "Screen", () => new() { ["confidencePct"] = 90, ["timeoutMs"] = 10_000 },
-            PictureFields, b => b.GetString("imageData") is { Length: > 0 } ? $"Wait for picture · {b.GetInt("confidencePct", 90)}%" : "Wait for picture (none yet)"),
+            Tapping(PictureFields), b => b.GetString("imageData") is { Length: > 0 } ? $"Wait for picture · {b.GetInt("confidencePct", 90)}%{Tap(b)}" : "Wait for picture (none yet)"),
         new(BlockTypes.WaitForImageGone, "Wait until picture is gone", "Screen", () => new() { ["confidencePct"] = 90, ["timeoutMs"] = 10_000 },
             PictureFields, b => b.GetString("imageData") is { Length: > 0 } ? "Wait until picture is gone" : "Wait until picture is gone (none yet)"),
         new(BlockTypes.DetectPixelColor, "Wait for color", "Screen", () => new() { ["x"] = 540, ["y"] = 1200, ["color"] = "#FFFFFF", ["tolerance"] = 10, ["timeoutMs"] = 5000 },
-            PixelFields, b => $"Wait for {b.GetString("color", "")} at {b.GetInt("x", 0)}, {b.GetInt("y", 0)}"),
+            Tapping(PixelFields), b => $"Wait for {b.GetString("color", "")} at {b.GetInt("x", 0)}, {b.GetInt("y", 0)}{Tap(b)}"),
         new(BlockTypes.DetectPixelColorGone, "Wait until color is gone", "Screen", () => new() { ["x"] = 540, ["y"] = 1200, ["color"] = "#FFFFFF", ["tolerance"] = 10, ["timeoutMs"] = 5000 },
             PixelFields, b => $"Wait until {b.GetInt("x", 0)}, {b.GetInt("y", 0)} isn't {b.GetString("color", "")}"),
 
@@ -167,6 +199,11 @@ internal static class BlockKinds
 
     public static string AppName(string? package) =>
         string.IsNullOrEmpty(package) ? "(pick an app)" : AppNames.TryGetValue(package, out var name) ? name : package;
+
+    private static string Tap(Block b) => b.GetString("whenFound", "none") is "tap" or "click" ? " · tap it" : "";
+    private static string Looking(Block b) => b.GetString("target", "image") == "text"
+        ? $"\"{b.GetString("value", "")}\""
+        : b.GetString("imageData") is { Length: > 0 } ? "the picture" : "a picture (none yet)";
 
     public static string DescribeCondition(JsonObject? c)
     {

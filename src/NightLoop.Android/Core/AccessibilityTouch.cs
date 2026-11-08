@@ -151,6 +151,49 @@ internal sealed class AccessibilityTouch : ITouchSender
         }
     }
 
+    public async Task SteerAsync(int x, int y, Func<Task<(int X, int Y)?>> next, CancellationToken ct)
+    {
+        var covered = await OnMainAsync(() => Overlays.LetThrough([(x, y)]));
+        var (atX, atY) = (x, y);
+        GestureDescription.StrokeDescription? stroke = null;
+        try
+        {
+            if (covered.Count > 0) await Task.Delay(80, ct);
+            var since = Environment.TickCount64 - Interlocked.Read(ref _lastEnd);
+            if (since < MinGapMs) await Task.Delay((int)(MinGapMs - since), ct);
+            stroke = new GestureDescription.StrokeDescription(Spot(x, y), 0, HoldPieceMs, true);
+            await SendStrokeAsync(stroke, ct);
+            while (true)
+            {
+                // Ask where to go (it may read the screen) while the finger holds still.
+                var asking = next();
+                while (!asking.IsCompleted)
+                {
+                    stroke = stroke.ContinueStroke(Spot(atX, atY), 0, HoldPieceMs, true)!;
+                    await SendStrokeAsync(stroke, ct);
+                }
+                if (await asking is not { } to) break;
+                // Slide the finger to the new spot, still down (a joystick turns without letting go).
+                var move = new Path();
+                move.MoveTo(atX, atY);
+                move.LineTo(to.X, to.Y);
+                stroke = stroke.ContinueStroke(move, 0, HoldPieceMs, true)!;
+                await SendStrokeAsync(stroke, ct);
+                (atX, atY) = (to.X, to.Y);
+            }
+        }
+        finally
+        {
+            if (stroke is not null)
+            {
+                try { await SendStrokeAsync(stroke.ContinueStroke(Spot(atX, atY), 0, 1, false)!, CancellationToken.None); }
+                catch (Exception) { /* service gone: Android lifts it anyway */ }
+            }
+            Interlocked.Exchange(ref _lastEnd, Environment.TickCount64);
+            if (covered.Count > 0) Night.OnMain(() => Overlays.Restore(covered));
+        }
+    }
+
     private static Path Spot(int x, int y)
     {
         var path = new Path();

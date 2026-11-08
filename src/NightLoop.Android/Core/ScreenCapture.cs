@@ -165,7 +165,7 @@ internal sealed class ScreenCapture : IScreenCapture
     /// <summary>Whether a macro reads the screen, so Play asks for screen capture first.</summary>
     public static bool Needs(MacroDoc doc) => doc.Blocks.Any(b =>
         b.Type is BlockTypes.WaitForText or BlockTypes.WaitForTextGone or BlockTypes.WaitForImage or BlockTypes.WaitForImageGone
-            or BlockTypes.DetectPixelColor or BlockTypes.DetectPixelColorGone
+            or BlockTypes.DetectPixelColor or BlockTypes.DetectPixelColorGone or BlockTypes.SwipeScan or BlockTypes.WalkTo
         || (b.Params["condition"]?.ToJsonString() is { } c && (c.Contains("\"textVisible\"") || c.Contains("\"imageVisible\"") || c.Contains("\"pixelColor\""))));
 }
 

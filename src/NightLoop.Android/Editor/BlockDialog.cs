@@ -78,6 +78,22 @@ internal static class BlockDialog
                 });
                 break;
             }
+            case SecondsField f:
+            {
+                var stored = copy.GetInt(f.Key);
+                var input = Ui.Input(a, f.Hint, stored is > 0 ? (stored.Value / 1000.0).ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) : "",
+                    InputTypes.ClassNumber | InputTypes.NumberFlagDecimal);
+                body.AddView(input);
+                apply.Add(() =>
+                {
+                    var text = (input.Text ?? "").Trim().Replace(',', '.');
+                    if (double.TryParse(text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var sec) && sec >= 0)
+                        p[f.Key] = (int)Math.Min(MacroLimits.WaitMaxMs, Math.Round(sec * 1000));
+                    else if (f.BlankIsInfinite) p[f.Key] = 0;
+                    else p.Remove(f.Key);
+                });
+                break;
+            }
             case LoopCountField:
             {
                 var input = Ui.Number(a, "Infinite", copy.GetBool("forever") == true ? null : copy.GetInt("count"));
@@ -124,12 +140,15 @@ internal static class BlockDialog
                 {
                     foreach (var w in apply) w();
                     Current?.Dismiss();
-                    var spots = copy.Type is BlockTypes.Swipe or BlockTypes.SwipeHold
-                        ? new[] { "Touch where the swipe starts", "Touch where the swipe ends" }
-                        : new[] { "Touch the spot to tap" };
+                    var spots = copy.Type switch
+                    {
+                        BlockTypes.WalkTo => new[] { "Touch the middle of the joystick", "Touch where the joystick is pushed to walk forward" },
+                        BlockTypes.Swipe or BlockTypes.SwipeHold or BlockTypes.SwipeScan => new[] { "Touch where the swipe starts", "Touch where the swipe ends" },
+                        _ => new[] { "Touch the spot to tap" },
+                    };
                     ScreenPicker.Pick((Activity)a, spots, picked =>
                     {
-                        if (copy.Type is BlockTypes.Swipe or BlockTypes.SwipeHold && picked.Count == 2)
+                        if (copy.Type is BlockTypes.Swipe or BlockTypes.SwipeHold or BlockTypes.SwipeScan or BlockTypes.WalkTo && picked.Count == 2)
                         {
                             p["from"] = new JsonObject { ["x"] = picked[0].X, ["y"] = picked[0].Y };
                             p["to"] = new JsonObject { ["x"] = picked[1].X, ["y"] = picked[1].Y };
@@ -433,7 +452,7 @@ internal static class BlockDialog
             got(null);
             return;
         }
-        ScreenPicker.PickBox(a, "Drag a box around the picture", r =>
+        ScreenPicker.PickBox(a, "Drag a box around the picture", r => AfterOverlaysHide(() =>
         {
             try
             {
@@ -445,7 +464,7 @@ internal static class BlockDialog
                 Ui.Toast(a, $"Couldn't take the picture: {ex.Message}");
                 got(null);
             }
-        });
+        }));
     }
 
     /// <summary>Pictures are at most 200 px a side; bigger boxes are scaled down (size tolerance finds them again).</summary>
@@ -467,6 +486,21 @@ internal static class BlockDialog
         return new NightLoop.Engine.Screen.ScreenImage(image.Left, image.Top, w, h, px);
     }
 
+    /// <summary>
+    /// Runs <paramref name="take"/> once the screen shows neither the picker nor Night-loop's own windows (dots, chips,
+    /// play bar), so a saved picture or color is only the game. Taken with them in it, a picture could match the
+    /// step chip itself while the macro played and the wait went on at once.
+    /// </summary>
+    private static void AfterOverlaysHide(Action take)
+    {
+        var hidden = Core.Overlays.HideAll();
+        new global::Android.OS.Handler(global::Android.OS.Looper.MainLooper!).PostDelayed(() =>
+        {
+            try { take(); }
+            finally { Core.Overlays.ShowAgain(hidden); }
+        }, 400);
+    }
+
     /// <summary>Touch a spot; its position and current color come back (null if screen reading is off).</summary>
     private static void PickPixel(Context a, Action<(int X, int Y, string Color)?> got)
     {
@@ -480,7 +514,7 @@ internal static class BlockDialog
         ScreenPicker.Pick(a, ["Touch the spot whose color to watch"], picked =>
         {
             var (x, y) = picked[0];
-            new global::Android.OS.Handler(global::Android.OS.Looper.MainLooper!).PostDelayed(() =>
+            AfterOverlaysHide(() =>
             {
                 try
                 {
@@ -492,7 +526,7 @@ internal static class BlockDialog
                     Ui.Toast(a, $"Couldn't read the color: {ex.Message}");
                     got(null);
                 }
-            }, 350);
+            });
         });
     }
 }
