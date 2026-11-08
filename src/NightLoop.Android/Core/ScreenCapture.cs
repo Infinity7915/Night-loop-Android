@@ -23,6 +23,7 @@ internal sealed class ScreenCapture : IScreenCapture
     private VirtualDisplay? _display;
     private ImageReader? _reader;
     private byte[]? _frame;
+    private byte[]? _raw;
     private int _width, _height;
 
     public static bool Ready => Instance._projection is not null;
@@ -107,8 +108,11 @@ internal sealed class ScreenCapture : IScreenCapture
         var pixelStride = plane.PixelStride;
         var w = Math.Min(_width, image.Width);
         var h = Math.Min(_height, image.Height);
-        var raw = new byte[buffer.Remaining()];
-        buffer.Get(raw);
+        // Reuse one buffer: a new ~10 MB array for every look piled up memory when the bubble ran for a long time.
+        var size = buffer.Remaining();
+        if (_raw is null || _raw.Length < size) _raw = new byte[size];
+        var raw = _raw;
+        buffer.Get(raw, 0, size);
         var frame = _frame is { Length: var n } f && n == _width * _height * 4 ? f : new byte[_width * _height * 4];
         for (var y = 0; y < h; y++)
         {
