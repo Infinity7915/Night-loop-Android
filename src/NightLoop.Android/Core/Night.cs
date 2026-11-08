@@ -25,6 +25,8 @@ internal static class Night
     public static ApiClient Api { get; private set; } = null!;
     public static AccountSession Session { get; private set; } = null!;
     public static RunManager Runs { get; private set; } = null!;
+    /// <summary>Settings' extra waits, read live by running macros.</summary>
+    public static BlockWaits Waits { get; } = new();
 
     /// <summary>Every macro on the account, newest first. Android macros play here; PC macros are listed only.</summary>
     public static IReadOnlyList<MacroSummaryDto> Macros { get; private set; } = [];
@@ -44,6 +46,8 @@ internal static class Night
         _app = context.ApplicationContext!;
         AppInfo.Load(_app);
         LocalSettings.Load(_app);
+        Waits.AfterClicksMs = LocalSettings.WaitAfterTapsMs;
+        Waits.AfterBlocksMs = LocalSettings.WaitAfterBlocksMs;
 
         var http = new HttpClient { BaseAddress = new Uri(ServerUrl), Timeout = TimeSpan.FromSeconds(30) };
         Api = new ApiClient(http, AppInfo.InstallId(_app), AppInfo.Version, MacroPlatforms.Android);
@@ -65,6 +69,7 @@ internal static class Night
             Notify = message => OnMain(() => Screens.Ui.Toast(_app, message)),
             PlaySound = _ => OnMain(PlayDefaultSound),
             RunMacro = RunByNameAsync,
+            Waits = Waits,
         };
         Runs.RunStateChanged += (run, state) => OnMain(() =>
         {

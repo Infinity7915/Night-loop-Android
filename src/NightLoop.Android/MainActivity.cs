@@ -551,6 +551,10 @@ public sealed class MainActivity : Activity
         };
         playing.AddView(delay);
         playing.AddView(Ui.Text(this, $"0 – {LocalSettings.StartDelayMaxMs} ms. Default {LocalSettings.StartDelayDefaultMs}.", 12, Palette.TextQuiet));
+        AddWait(playing, "Wait after taps (ms): after every Tap, Long press and Swipe, unless the step sets its own.",
+            () => LocalSettings.WaitAfterTapsMs, v => LocalSettings.WaitAfterTapsMs = v);
+        AddWait(playing, "Wait after every block (ms): a pause after each step. Taps that wait 0 skip it.",
+            () => LocalSettings.WaitAfterBlocksMs, v => LocalSettings.WaitAfterBlocksMs = v);
         page.AddView(playing);
 
         page.AddView(Ui.Heading(this, "Account"));
@@ -792,5 +796,19 @@ public sealed class MainActivity : Activity
             StartForegroundService(intent);
         // The service flips Running when it starts or stops.
         _bubbleButton?.PostDelayed(RefreshSetup, 300);
+    }
+
+    private void AddWait(LinearLayout card, string label, Func<int> get, Action<int> set)
+    {
+        card.AddView(Ui.Text(this, label, 14, Palette.Text));
+        var box = Ui.Number(this, "0", get());
+        box.FocusChange += (_, e) =>
+        {
+            if (e.HasFocus) return;
+            set(int.TryParse(box.Text, out var ms) ? ms : 0);
+            box.Text = get().ToString();
+        };
+        card.AddView(box);
+        card.AddView(Ui.Text(this, $"0 – {LocalSettings.WaitAfterMaxMs} ms. Default 0.", 12, Palette.TextQuiet));
     }
 }
