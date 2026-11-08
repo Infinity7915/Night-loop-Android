@@ -184,7 +184,7 @@ internal sealed class DotEditor
                     Key = b.GetString("key", "Enter"),
                     KeyHoldMs = b.GetInt("holdMs", 50),
                 },
-                BlockTypes.Swipe => new Step { Kind = Kind.Swipe, Block = Copy(b) },
+                BlockTypes.Swipe or BlockTypes.SwipeHold => new Step { Kind = Kind.Swipe, Block = Copy(b) },
                 // Hold key and everything else keep their block as it is.
                 _ => new Step { Kind = Kind.Other, Block = Copy(b) },
             };
@@ -346,7 +346,7 @@ internal sealed class DotEditor
         step.View.Text = step.Kind switch
         {
             Kind.Touch => step.Hold ? $"{number}H" : step.Count > 1 ? $"{number}×{step.Count}" : number.ToString(),
-            Kind.Swipe => $"{number}▸",
+            Kind.Swipe => $"▶{number}",
             Kind.Wait => $"{number} ⏱ {Duration(step.Ms)}{off}",
             Kind.Key => step.KeyMode switch
             {
@@ -357,7 +357,8 @@ internal sealed class DotEditor
             },
             _ => $"{number} {Icon(step.Block!)} {Summary(step.Block!)}{off}",
         };
-        if (step.EndView is not null) step.EndView.Text = $"▸{number}";
+        // Start and end of a swipe look different: green ▶ start, red ■ end (✋ when it holds there).
+        if (step.EndView is not null) step.EndView.Text = step.Block?.Type == BlockTypes.SwipeHold ? $"✋{number}" : $"■{number}";
         var fill = step.Kind switch
         {
             Kind.Touch => Color.Argb(210, 124, 92, 246),
@@ -379,7 +380,10 @@ internal sealed class DotEditor
             var shape = new GradientDrawable();
             if (step.Kind is Kind.Touch or Kind.Swipe) shape.SetShape(ShapeType.Oval);
             else shape.SetCornerRadius(Px(18));
-            shape.SetColor(step == _playing ? Color.Argb(230, 34, 160, 90) : fill);
+            var color = fill;
+            if (step.Kind == Kind.Swipe && step.Enabled)
+                color = view == step.EndView ? Color.Argb(215, 205, 60, 75) : Color.Argb(215, 30, 150, 80);
+            shape.SetColor(step == _playing ? Color.Argb(230, 34, 160, 90) : color);
             shape.SetStroke(Px(step == _selected || step == _playing ? 3 : 2), ring);
             view.Background = shape;
         }
@@ -447,8 +451,7 @@ internal sealed class DotEditor
     private void AddSwipe(Block block)
     {
         var (x, y) = NewSpot();
-        if (block.GetPoint("from") is null || block.GetPoint("from") == (540, 1600))
-        {
+        { // a new swipe: put its dots near the middle
             block.Params["from"] = new JsonObject { ["x"] = x, ["y"] = y + Px(80) };
             block.Params["to"] = new JsonObject { ["x"] = x, ["y"] = y - Px(80) };
         }
@@ -456,7 +459,9 @@ internal sealed class DotEditor
         Insert(swipe);
         AddView(swipe, x, y);
         Changed();
-        Ui.Toast(C, "Drag the two dots: ▸ is where the swipe starts, the other where it ends.");
+        Ui.Toast(C, block.Type == BlockTypes.SwipeHold
+            ? "Drag the dots: green ▶ is where the swipe starts, red ■ is where it ends and keeps holding. Tap a dot to set how long to hold or what to wait for."
+            : "Drag the dots: green ▶ is where the swipe starts, red ■ is where it ends.");
     }
 
     private void AddWait()
@@ -518,7 +523,7 @@ internal sealed class DotEditor
                 case BlockTypes.Type: AddKey("type"); return;
             }
             var block = Block.Create(NextId(), kind.Type, kind.Defaults());
-            if (kind.Type == BlockTypes.Swipe)
+            if (kind.Type is BlockTypes.Swipe or BlockTypes.SwipeHold)
             {
                 AddSwipe(block);
                 return;

@@ -21,7 +21,8 @@ internal sealed record PictureField() : Field("imageData", "Picture");
 /// <summary>A point and its color, picked by touching the screen (x, y, color).</summary>
 internal sealed record PixelField() : Field("color", "Spot and color");
 /// <summary>If / Repeat until: app in front, text / picture on screen, or a pixel's color (or NOT).</summary>
-internal sealed record ConditionField() : Field("condition", "Check");
+/// <summary>Optional: adds a "no check" choice that removes the condition (Swipe and hold).</summary>
+internal sealed record ConditionField(bool Optional = false, string? Title = null) : Field("condition", Title ?? "Check");
 /// <summary>Loop count, where blank means Infinite (stored as forever: true).</summary>
 internal sealed record LoopCountField() : Field("count", "Times (blank = Infinite)");
 
@@ -71,6 +72,13 @@ internal static class BlockKinds
             () => new() { ["from"] = new JsonObject { ["x"] = 540, ["y"] = 1600 }, ["to"] = new JsonObject { ["x"] = 540, ["y"] = 800 }, ["durationMs"] = 300 },
             [new SpotField("from", "Start"), new SpotField("to", "End"), new IntField("durationMs", "Swipe time (ms)", "300")],
             b => b.GetPoint("from") is { } f && b.GetPoint("to") is { } t ? $"Swipe {f.X}, {f.Y} → {t.X}, {t.Y}" : "Swipe"),
+        new(BlockTypes.SwipeHold, "Swipe and hold", "Touch",
+            () => new() { ["from"] = new JsonObject { ["x"] = 300, ["y"] = 1700 }, ["to"] = new JsonObject { ["x"] = 300, ["y"] = 1500 }, ["durationMs"] = 300, ["holdMs"] = 2000 },
+            [new SpotField("from", "Start"), new SpotField("to", "End (the finger stays down here)"), new IntField("durationMs", "Swipe time (ms)", "300"),
+             new IntField("holdMs", "Hold time (ms), when there's no check", "1000"),
+             new ConditionField(Optional: true, Title: "Keep holding until"),
+             new IntField("timeoutMs", "With a check: let go after (ms, blank = Infinite)", "Infinite")],
+            b => b.GetObject("condition") is { } c ? $"Swipe and hold until {DescribeCondition(c)}" : $"Swipe and hold {b.GetInt("holdMs", 1000)} ms"),
         new(BlockTypes.DeviceButton, "Phone button", "Touch", () => new() { ["button"] = "back" },
             [new ChoiceField("button", "Button", Buttons)],
             b => $"Press {Text(Buttons, b.GetString("button", "back"))}"),

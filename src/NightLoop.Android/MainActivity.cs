@@ -808,13 +808,46 @@ public sealed class MainActivity : Activity
                 row.AddView(running
                     ? Ui.Small(this, "■", () => Night.Stop(id), $"Stop {macro.Name}")
                     : Ui.Small(this, "▶", () => _ = PlayAsync(id), $"Play {macro.Name}"));
+                var name = macro.Name;
+                row.AddView(Ui.Small(this, "🗑", () => AskDeleteMacro(this, id, name), $"Delete {macro.Name}"));
                 card.Click += (_, _) => OpenEditor(id);
+                card.LongClick += (_, _) => AskDeleteMacro(this, id, name);
             }
             card.AddView(row);
             _macroList.AddView(card);
         }
         if (Night.MacroLimit > 0)
             _macroList.AddView(Ui.Text(this, $"{Night.Macros.Count} / {Night.MacroLimit} macros used", 13, Palette.TextQuiet));
+    }
+
+    /// <summary>Asks first, then deletes the macro from the account (stops it if it's playing).</summary>
+    internal static void AskDeleteMacro(Activity a, Guid id, string name, Action? deleted = null)
+    {
+        Dialogs.Builder(a)
+            .SetTitle("Delete macro?")!
+            .SetMessage($"\"{name}\" will be deleted for good. This can't be undone.")!
+            .SetPositiveButton("Delete", (_, _) => _ = DeleteMacroAsync(a, id, name, deleted))!
+            .SetNegativeButton("Cancel", (_, _) => { })!
+            .Show();
+    }
+
+    private static async Task DeleteMacroAsync(Activity a, Guid id, string name, Action? deleted)
+    {
+        try
+        {
+            if (Night.IsRunning(id)) Night.Stop(id);
+            await Night.Api.DeleteMacroAsync(id);
+            await Night.RefreshMacrosAsync();
+            a.RunOnUiThread(() =>
+            {
+                Ui.Toast(a, $"Deleted \"{name}\".");
+                deleted?.Invoke();
+            });
+        }
+        catch (Exception ex) when (ex is ApiException or ServerUnreachableException)
+        {
+            a.RunOnUiThread(() => Ui.Toast(a, ex.Message));
+        }
     }
 
     private async Task PlayAsync(Guid id)
