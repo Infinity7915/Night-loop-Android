@@ -1129,8 +1129,15 @@ internal sealed class DotEditor
         void OnStep(MacroRun r, int index) => Night.OnMain(() =>
         {
             var block = index >= 0 && index < r.Macro.Steps.Length ? r.Macro.Steps[index].Block : null;
-            _playing = block is not null && _byBlockId.TryGetValue(block.Id, out var step) ? step : null;
-            PaintAll();
+            var now = block is not null && _byBlockId.TryGetValue(block.Id, out var step) ? step : null;
+            if (now == _playing) return;
+            // Repaint only the two steps that changed: repainting every window on each step kept the screen busy
+            // with many steps, and the taps (sent on the same thread) piled up and then went off all at once.
+            var before = _playing;
+            _playing = now;
+            if (before is not null && _steps.Contains(before)) Paint(before);
+            if (now is not null) Paint(now);
+            ShowStatus();
         });
     }
 
