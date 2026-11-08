@@ -44,7 +44,8 @@ internal static class ScreenPicker
             }
             windows.RemoveView(layer);
             ComeBack(activity, app);
-            done(picked);
+            try { done(picked); }
+            catch (Exception ex) { Ui.Toast(app, $"Couldn't pick that spot: {ex.Message}"); }
         };
         hint.Click += (_, _) =>
         {
@@ -133,7 +134,8 @@ internal static class ScreenPicker
                     // Give the screen a moment to redraw without the box before the picture is taken.
                     new Android.OS.Handler(Android.OS.Looper.MainLooper!).PostDelayed(() =>
                     {
-                        done((l, t, w, h));
+                        try { done((l, t, w, h)); }
+                        catch (Exception ex) { Ui.Toast(app, $"Couldn't take the picture: {ex.Message}"); }
                         ComeBack(activity, app);
                     }, 350);
                     break;

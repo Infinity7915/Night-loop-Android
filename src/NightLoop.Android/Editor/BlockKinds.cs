@@ -164,11 +164,18 @@ internal static class BlockKinds
         var kind = Str(c?["kind"]);
         return kind switch
         {
-            "appInFront" => $"{AppName(Str(c!["package"]))} is in front",
+            "appInFront" => $"{AppName(Str(c!["package"]))} is open",
             "textVisible" => $"\"{Str(c!["text"])}\" is on screen",
             "imageVisible" => "the picture is on screen",
             "pixelColor" => $"{Str(c!["color"])} is at {Num(c!["x"])}, {Num(c!["y"])}",
-            "not" when c!["condition"] is JsonObject inner => "NOT: " + DescribeCondition(inner),
+            "not" when c!["condition"] is JsonObject inner => Str(inner["kind"]) switch
+            {
+                "appInFront" => $"{AppName(Str(inner["package"]))} is not open",
+                "textVisible" => $"\"{Str(inner["text"])}\" is not on screen",
+                "imageVisible" => "the picture is not on screen",
+                "pixelColor" => $"{Num(inner["x"])}, {Num(inner["y"])} is not {Str(inner["color"])}",
+                _ => "NOT: " + DescribeCondition(inner),
+            },
             null => "(no check)",
             _ => "a check made elsewhere",
         };

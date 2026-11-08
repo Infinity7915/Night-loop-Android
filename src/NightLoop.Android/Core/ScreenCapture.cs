@@ -33,15 +33,29 @@ internal sealed class ScreenCapture : IScreenCapture
     public void Start(Context context, int resultCode, Intent data)
     {
         Stop();
-        var manager = (MediaProjectionManager)context.GetSystemService(Context.MediaProjectionService)!;
-        var projection = manager.GetMediaProjection(resultCode, data);
-        if (projection is null) return;
-        projection.RegisterCallback(new Ended(), null);
-        var metrics = context.Resources!.DisplayMetrics!;
-        var (w, h) = RealSize(context);
-        var reader = ImageReader.NewInstance(w, h, (ImageFormatType)1 /* RGBA_8888 */, 2);
-        var display = projection.CreateVirtualDisplay("Night-loop", w, h, (int)metrics.DensityDpi,
-            (global::Android.Views.DisplayFlags)(int)VirtualDisplayFlags.AutoMirror, reader.Surface, null, null);
+        MediaProjection? projection = null;
+        ImageReader? reader = null;
+        VirtualDisplay? display;
+        try
+        {
+            var manager = (MediaProjectionManager)context.GetSystemService(Context.MediaProjectionService)!;
+            projection = manager.GetMediaProjection(resultCode, data);
+            if (projection is null) return;
+            projection.RegisterCallback(new Ended(projection), new global::Android.OS.Handler(global::Android.OS.Looper.MainLooper!));
+            var metrics = context.Resources!.DisplayMetrics!;
+            var (w0, h0) = RealSize(context);
+            reader = ImageReader.NewInstance(w0, h0, (ImageFormatType)1 /* RGBA_8888 */, 2);
+            display = projection.CreateVirtualDisplay("Night-loop", w0, h0, (int)metrics.DensityDpi,
+                (global::Android.Views.DisplayFlags)(int)VirtualDisplayFlags.AutoMirror, reader.Surface, null, null);
+        }
+        catch (Java.Lang.Exception)
+        {
+            // Some phones and emulators refuse screen capture; screen reading just stays off instead of crashing.
+            reader?.Close();
+            try { projection?.Stop(); } catch (Java.Lang.Exception) { }
+            return;
+        }
+        var (w, h) = (reader.Width, reader.Height);
         lock (_gate)
         {
             _projection = projection;
@@ -82,7 +96,10 @@ internal sealed class ScreenCapture : IScreenCapture
     /// <summary>Copies the newest frame (RGBA with row padding) into a BGRA array.</summary>
     private void Grab()
     {
-        using var image = _reader!.AcquireLatestImage();
+        global::Android.Media.Image? image;
+        try { image = _reader!.AcquireLatestImage(); }
+        catch (Java.Lang.Exception) { return; }
+        using var _ = image;
         if (image is null) return;
         var plane = image.GetPlanes()![0];
         var buffer = plane.Buffer!;
@@ -123,12 +140,14 @@ internal sealed class ScreenCapture : IScreenCapture
         return (m.WidthPixels, m.HeightPixels);
     }
 
-    private sealed class Ended : MediaProjection.Callback
+    private sealed class Ended(MediaProjection mine) : MediaProjection.Callback
     {
         public override void OnStop() => Night.OnMain(() =>
         {
             lock (Instance._gate)
             {
+                // An older capture ending must not switch off the one that replaced it.
+                if (!ReferenceEquals(Instance._projection, mine)) return;
                 Instance._display?.Release();
                 Instance._reader?.Close();
                 Instance._display = null;
