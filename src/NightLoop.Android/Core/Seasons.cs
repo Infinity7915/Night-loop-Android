@@ -51,59 +51,79 @@ internal static class Seasons
     ];
 
     /// <summary>
-    /// The season for this date in this country (two-letter region code from the device's region setting, never
-    /// GPS, and never saved or sent anywhere), or null on ordinary days. Country holidays only show in that country.
+    /// The season for this date (or null on ordinary days). Normally only holidays of this country show (two-letter
+    /// region code from the device's region setting, never GPS, never saved or sent). With <paramref name="global"/>
+    /// every country's holidays show. When holidays overlap, the one whose main day is closest wins; when their main
+    /// days are within 3 days of each other it's a coin flip, the same one all day.
     /// </summary>
-    public static string? For(DateTime day, string? region)
+    public static string? For(DateTime day, string? region, bool global = false)
     {
         var country = string.IsNullOrWhiteSpace(region) ? "US" : region.Trim().ToUpperInvariant();
-        var eastAsia = EastAsia.Contains(country);
         var d = day.Date;
-        var y = d.Year;
-        bool In(DateTime from, DateTime to) => d >= from && d <= to;
-        bool Near(Dictionary<int, (int M, int D)> table, int before, int after) =>
-            table.TryGetValue(y, out var md) && In(new DateTime(y, md.M, md.D).AddDays(-before), new DateTime(y, md.M, md.D).AddDays(after));
+        var candidates = new List<(string Name, DateTime Main)>();
+        foreach (var y in new[] { d.Year - 1, d.Year, d.Year + 1 })
+            foreach (var (name, main, before, after, countries) in Holidays(y))
+            {
+                if (d < main.AddDays(-before) || d > main.AddDays(after)) continue;
+                var here = countries is null ? !NoShared(name, country) : countries.Contains(country);
+                if (here || global) candidates.Add((name, main));
+            }
+        if (candidates.Count == 0) return null;
+        candidates.Sort((a, b) => Math.Abs((a.Main - d).Days).CompareTo(Math.Abs((b.Main - d).Days)));
+        var best = candidates[0];
+        var ties = candidates.Where(c => Math.Abs((c.Main - best.Main).Days) <= 3 && Math.Abs((c.Main - d).Days) - Math.Abs((best.Main - d).Days) <= 3).ToList();
+        if (ties.Count == 1) return best.Name;
+        // Same pick for the whole day, so the icon doesn't change every time the app opens.
+        var seed = d.Year * 1000 + d.DayOfYear;
+        return ties.OrderBy(t => t.Name, StringComparer.Ordinal).ElementAt(new Random(seed).Next(ties.Count)).Name;
+    }
+
+    /// <summary>Shared holidays that a country doesn't usually celebrate.</summary>
+    private static bool NoShared(string name, string country) => name switch
+    {
+        "christmas" => EidCountries.Contains(country),
+        "easter" => EastAsia.Contains(country) || EidCountries.Contains(country),
+        _ => false,
+    };
+
+    /// <summary>Every holiday in a year: its main day, days shown before and after, and its countries (null = everywhere).</summary>
+    private static IEnumerable<(string Name, DateTime Main, int Before, int After, string[]? Countries)> Holidays(int y)
+    {
         var easter = EasterSunday(y);
+        yield return ("newyear", new DateTime(y, 1, 1), 1, 1, null);
+        yield return ("christmas", new DateTime(y, 12, 25), 7, 5, null);
+        yield return ("valentine", new DateTime(y, 2, 14), 6, 0, null);
+        yield return ("easter", easter, 7, 1, null);
+        yield return ("stpatrick", new DateTime(y, 3, 17), 6, 0, StPatrickCountries);
+        yield return ("halloween", new DateTime(y, 10, 31), 7, 0, HalloweenCountries);
+        yield return ("july4", new DateTime(y, 7, 4), 6, 1, ["US"]);
+        yield return ("thanksgiving", NthWeekday(y, 11, DayOfWeek.Thursday, 4), 3, 3, ["US"]);
+        yield return ("thanksgiving", NthWeekday(y, 10, DayOfWeek.Monday, 2), 0, 6, ["CA"]);
+        yield return ("canadaday", new DateTime(y, 7, 1), 3, 0, ["CA"]);
+        yield return ("dayofthedead", new DateTime(y, 11, 1), 1, 1, ["MX"]);
+        yield return ("carnival", easter.AddDays(-47), 3, 1, ["BR"]);
+        yield return ("hanami", new DateTime(y, 4, 1), 7, 6, ["JP"]);
+        yield return ("bastille", new DateTime(y, 7, 14), 4, 0, ["FR"]);
+        yield return ("bonfire", new DateTime(y, 11, 5), 4, 0, ["GB"]);
+        yield return ("australiaday", new DateTime(y, 1, 26), 3, 0, ["AU"]);
+        yield return ("kingsday", new DateTime(y, 4, 27), 3, 0, ["NL"]);
+        yield return ("oktoberfest", new DateTime(y, 9, 26), 7, 8, OktoberfestCountries);
+        if (LunarNewYear.TryGetValue(y, out var lny)) yield return ("lunarnewyear", new DateTime(y, lny.M, lny.D), 1, 6, EastAsia);
+        if (MidAutumn.TryGetValue(y, out var ma)) yield return ("midautumn", new DateTime(y, ma.M, ma.D), 3, 1, EastAsia);
+        if (Diwali.TryGetValue(y, out var dw)) yield return ("diwali", new DateTime(y, dw.M, dw.D), 2, 2, DiwaliCountries);
+        if (Holi.TryGetValue(y, out var ho)) yield return ("holi", new DateTime(y, ho.M, ho.D), 1, 1, HoliCountries);
+        foreach (var eid in EidAlFitr.Where(e => e.Year == y)) yield return ("eid", eid, 1, 2, EidCountries);
+    }
 
-        // Country holidays first.
-        if (eastAsia && Near(LunarNewYear, 1, 6)) return "lunarnewyear";
-        if (eastAsia && Near(MidAutumn, 3, 1)) return "midautumn";
-        if (DiwaliCountries.Contains(country) && Near(Diwali, 2, 2)) return "diwali";
-        if (HoliCountries.Contains(country) && Near(Holi, 1, 1)) return "holi";
-        if (EidCountries.Contains(country) && EidAlFitr.Any(e => In(e.AddDays(-1), e.AddDays(2)))) return "eid";
-        if (country == "MX" && In(new(y, 10, 31), new(y, 11, 2))) return "dayofthedead";
-        if (country == "BR" && In(easter.AddDays(-50), easter.AddDays(-46))) return "carnival"; // Saturday to Ash Wednesday
-        if (country == "JP" && In(new(y, 3, 25), new(y, 4, 7))) return "hanami";
-        if (country == "CA" && In(new(y, 6, 28), new(y, 7, 1))) return "canadaday";
-        if (country == "US" && In(new(y, 6, 28), new(y, 7, 5))) return "july4";
-        if (country == "FR" && In(new(y, 7, 10), new(y, 7, 14))) return "bastille";
-        if (country == "GB" && In(new(y, 11, 1), new(y, 11, 5))) return "bonfire";
-        if (country == "AU" && In(new(y, 1, 23), new(y, 1, 26))) return "australiaday";
-        if (country == "NL" && In(new(y, 4, 24), new(y, 4, 27))) return "kingsday";
-        if (OktoberfestCountries.Contains(country) && In(new(y, 9, 19), new(y, 10, 4))) return "oktoberfest";
-        if (StPatrickCountries.Contains(country) && In(new(y, 3, 11), new(y, 3, 17))) return "stpatrick";
-        if (country is "US" or "CA")
-        {
-            // US: 4th Thursday of November. Canada: 2nd Monday of October. The whole week around it, Monday to Sunday.
-            var t = country == "US" ? new DateTime(y, 11, 1) : new DateTime(y, 10, 1);
-            var weekday = country == "US" ? DayOfWeek.Thursday : DayOfWeek.Monday;
-            while (t.DayOfWeek != weekday) t = t.AddDays(1);
-            t = t.AddDays(country == "US" ? 21 : 7);
-            var monday = t.AddDays(-(((int)t.DayOfWeek + 6) % 7));
-            if (In(monday, monday.AddDays(6))) return "thanksgiving";
-        }
-        if (HalloweenCountries.Contains(country) && In(new(y, 10, 24), new(y, 10, 31))) return "halloween";
-
-        // Shared holidays.
-        if (d == new DateTime(y, 12, 31) || In(new(y, 1, 1), new(y, 1, 2))) return "newyear";
-        if (!EidCountries.Contains(country) && In(new(y, 12, 18), new(y, 12, 30))) return "christmas";
-        if (In(new(y, 2, 8), new(y, 2, 14))) return "valentine";
-        if (!eastAsia && !EidCountries.Contains(country) && In(easter.AddDays(-7), easter.AddDays(1))) return "easter";
-        return null;
+    private static DateTime NthWeekday(int y, int month, DayOfWeek weekday, int n)
+    {
+        var t = new DateTime(y, month, 1);
+        while (t.DayOfWeek != weekday) t = t.AddDays(1);
+        return t.AddDays(7 * (n - 1));
     }
 
     /// <summary>The season to show now: null when the switch is off or it's an ordinary day.</summary>
-    public static string? Now => LocalSettings.SeasonalThemes ? For(DateTime.Now, Region()) : null;
+    public static string? Now => LocalSettings.SeasonalThemes || LocalSettings.GlobalSeasonalThemes ? For(DateTime.Now, Region(), LocalSettings.GlobalSeasonalThemes) : null;
 
     /// <summary>The icon to draw in the app (bubble, notifications).</summary>
     public static int Icon => Now switch

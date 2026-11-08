@@ -607,12 +607,24 @@ public sealed class MainActivity : Activity
         var seasonal = new global::Android.Widget.Switch(this) { Text = "Seasonal themes: around holidays (Christmas week, Halloween, Valentine's and more) Night-loop's icon and bubble dress up for the season. Holidays follow your phone's region setting (for example Lunar New Year and Mid-Autumn in China, the 4th of July in the US). Your location isn't used or saved.", Checked = LocalSettings.SeasonalThemes };
         seasonal.SetTextColor(Palette.Text);
         seasonal.SetPadding(0, Palette.Dp(this, 8), 0, Palette.Dp(this, 8));
+        var global = new global::Android.Widget.Switch(this) { Text = "Global themes: every country's holidays show when it's their time, not only your region's. When two overlap, the one whose main day is closer wins; within 3 days of each other it's a 50/50 pick for the day.", Checked = LocalSettings.GlobalSeasonalThemes };
+        global.SetTextColor(Palette.Text);
+        global.SetPadding(0, Palette.Dp(this, 8), 0, Palette.Dp(this, 8));
+        // Only one of the two can be on (or neither).
         seasonal.CheckedChange += (_, e) =>
         {
             LocalSettings.SeasonalThemes = e.IsChecked;
+            if (e.IsChecked && global.Checked) global.Checked = false;
+            Seasons.ApplyLauncherIcon(this);
+        };
+        global.CheckedChange += (_, e) =>
+        {
+            LocalSettings.GlobalSeasonalThemes = e.IsChecked;
+            if (e.IsChecked && seasonal.Checked) seasonal.Checked = false;
             Seasons.ApplyLauncherIcon(this);
         };
         playing.AddView(seasonal);
+        playing.AddView(global);
 >>>>>>> Stashed changes
         page.AddView(playing);
 
