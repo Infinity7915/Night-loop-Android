@@ -99,12 +99,68 @@ internal sealed class AccessibilityTouch : ITouchSender
         finally { Interlocked.Exchange(ref _lastEnd, Environment.TickCount64); }
     }
 
-    private static async Task SendOnceAsync(Path path, int durationMs, CancellationToken ct)
+    private static Task SendOnceAsync(Path path, int durationMs, CancellationToken ct) =>
+        SendStrokeAsync(new GestureDescription.StrokeDescription(path, 0, Clamp(durationMs)), ct);
+
+    private static long Clamp(int ms) => Math.Clamp(ms, 1, (int)GestureDescription.MaxGestureDuration);
+
+    /// <summary>How long each piece of a hold lasts; the finger stays down between pieces.</summary>
+    private const int HoldPieceMs = 150;
+
+    public async Task SwipeHoldAsync(int fromX, int fromY, int toX, int toY, int durationMs, Func<Task<bool>> keepHolding, CancellationToken ct)
     {
-        var duration = Math.Clamp(durationMs, 1, (int)GestureDescription.MaxGestureDuration);
-        var gesture = new GestureDescription.Builder()
-            .AddStroke(new GestureDescription.StrokeDescription(path, 0, duration))!
-            .Build()!;
+        var covered = await OnMainAsync(() => Overlays.LetThrough([(fromX, fromY), (toX, toY)]));
+        try
+        {
+            if (covered.Count > 0) await Task.Delay(80, ct);
+            var since = Environment.TickCount64 - Interlocked.Read(ref _lastEnd);
+            if (since < MinGapMs) await Task.Delay((int)(MinGapMs - since), ct);
+
+            var swipe = new Path();
+            swipe.MoveTo(fromX, fromY);
+            swipe.LineTo(toX, toY);
+            // willContinue: the finger stays down at the end, and each hold piece carries on the same touch.
+            var stroke = new GestureDescription.StrokeDescription(swipe, 0, Clamp(durationMs), true);
+            await SendStrokeAsync(stroke, ct);
+            try
+            {
+                while (true)
+                {
+                    // Check (screen reading can be slow) while the finger keeps holding, piece after piece.
+                    var checking = keepHolding();
+                    do
+                    {
+                        stroke = stroke.ContinueStroke(Spot(toX, toY), 0, HoldPieceMs, true)!;
+                        await SendStrokeAsync(stroke, ct);
+                    }
+                    while (!checking.IsCompleted);
+                    if (!await checking) break;
+                }
+            }
+            finally
+            {
+                // Lift the finger, even when the macro was stopped.
+                try { await SendStrokeAsync(stroke.ContinueStroke(Spot(toX, toY), 0, 1, false)!, CancellationToken.None); }
+                catch (Exception) { /* service gone: Android lifts it anyway */ }
+            }
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _lastEnd, Environment.TickCount64);
+            if (covered.Count > 0) Night.OnMain(() => Overlays.Restore(covered));
+        }
+    }
+
+    private static Path Spot(int x, int y)
+    {
+        var path = new Path();
+        path.MoveTo(x, y);
+        return path;
+    }
+
+    private static async Task SendStrokeAsync(GestureDescription.StrokeDescription stroke, CancellationToken ct)
+    {
+        var gesture = new GestureDescription.Builder().AddStroke(stroke)!.Build()!;
         // Android can briefly drop the service (it reconnects on its own) or refuse a gesture while another app
         // is switching in. Try a few times before stopping the macro.
         for (var attempt = 0; ; attempt++)

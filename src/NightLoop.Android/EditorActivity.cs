@@ -55,6 +55,7 @@ public sealed class EditorActivity : Activity
         _title = Ui.Text(this, "Loading…", 22, Palette.Text, bold: true);
         top.AddView(Ui.Fill(_title));
         top.AddView(Ui.Small(this, "✎", Rename, "Rename"));
+        top.AddView(Ui.Small(this, "🗑", () => MainActivity.AskDeleteMacro(this, _id, _name.Length > 0 ? _name : "this macro", Deleted), "Delete this macro"));
         page.AddView(top);
         _sync = Ui.Text(this, "", 13, Palette.TextQuiet);
         page.AddView(_sync);
@@ -94,7 +95,18 @@ public sealed class EditorActivity : Activity
         Finish();
     }
 
-    protected override void OnPause()
+    /// <summary>The macro is gone: drop unsaved edits (nothing to save them to) and go home.</summary>
+    private void Deleted()
+    {
+        if (_autosaver is { } saver)
+        {
+            _autosaver = null;
+            _ = saver.DisposeAsync().AsTask();
+        }
+        GoHome();
+    }
+
+        protected override void OnPause()
     {
         ApplyRepeat();
         _ = FlushAsync();

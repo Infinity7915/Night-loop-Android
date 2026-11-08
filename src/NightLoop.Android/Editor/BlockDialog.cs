@@ -124,12 +124,12 @@ internal static class BlockDialog
                 {
                     foreach (var w in apply) w();
                     Current?.Dismiss();
-                    var spots = copy.Type == BlockTypes.Swipe
+                    var spots = copy.Type is BlockTypes.Swipe or BlockTypes.SwipeHold
                         ? new[] { "Touch where the swipe starts", "Touch where the swipe ends" }
                         : new[] { "Touch the spot to tap" };
                     ScreenPicker.Pick((Activity)a, spots, picked =>
                     {
-                        if (copy.Type == BlockTypes.Swipe && picked.Count == 2)
+                        if (copy.Type is BlockTypes.Swipe or BlockTypes.SwipeHold && picked.Count == 2)
                         {
                             p["from"] = new JsonObject { ["x"] = picked[0].X, ["y"] = picked[0].Y };
                             p["to"] = new JsonObject { ["x"] = picked[1].X, ["y"] = picked[1].Y };
@@ -255,8 +255,8 @@ internal static class BlockDialog
                 }, primary: false));
                 break;
             }
-            case ConditionField:
-                AddCondition(a, body, copy, apply, isNew, done);
+            case ConditionField cf:
+                AddCondition(a, body, copy, apply, isNew, done, cf.Optional);
                 break;
         }
     }
@@ -269,13 +269,14 @@ internal static class BlockDialog
         ("pixelColor", "Spot is a color"), ("!pixelColor", "Spot is not that color"),
     ];
 
-    private static void AddCondition(Context a, LinearLayout body, Block copy, List<Action> apply, bool isNew, Action<Block> done)
+    private static void AddCondition(Context a, LinearLayout body, Block copy, List<Action> apply, bool isNew, Action<Block> done, bool optional = false)
     {
         var p = copy.Params;
         var c = copy.GetObject("condition");
         var negated = BlockKinds.Str(c?["kind"]) == "not";
         var inner = (negated ? c!["condition"] as JsonObject : c)?.DeepClone() as JsonObject ?? new JsonObject { ["kind"] = "appInFront", ["package"] = "" };
         var kind = BlockKinds.Str(inner["kind"]) ?? "appInFront";
+        var none = optional && c is null;
         if (CheckKinds.All(k => k.Kind != kind))
         {
             body.AddView(Ui.Text(a, "This check was made in another version and can't be changed here.", 14, Palette.TextQuiet));
@@ -283,13 +284,14 @@ internal static class BlockDialog
         }
         var group = new RadioGroup(a) { Orientation = Orientation.Vertical };
         var ids = new Dictionary<int, string>();
-        foreach (var (value, text) in CheckKinds)
+        var choices = optional ? CheckKinds.Prepend(("none", "No check: hold for the hold time")) : CheckKinds;
+        foreach (var (value, text) in choices)
         {
             var radio = new RadioButton(a) { Text = text, Id = global::Android.Views.View.GenerateViewId() };
             radio.SetTextColor(Palette.Text);
             ids[radio.Id] = value;
             group.AddView(radio);
-            if (value == (negated ? "!" + kind : kind)) radio.Checked = true;
+            if (value == (none ? "none" : negated ? "!" + kind : kind)) radio.Checked = true;
         }
         body.AddView(group);
         var details = Ui.Column(a, 0);
@@ -299,6 +301,7 @@ internal static class BlockDialog
         void Fill(string k)
         {
             details.RemoveAllViews();
+            if (k == "none") return;
             if (BlockKinds.Str(inner["kind"]) != k) inner = new JsonObject { ["kind"] = k };
             switch (k)
             {
@@ -401,13 +404,19 @@ internal static class BlockDialog
         }
         void Save()
         {
+            if (none)
+            {
+                p.Remove("condition");
+                return;
+            }
             var check = read();
             p["condition"] = negated ? new JsonObject { ["kind"] = "not", ["condition"] = check } : check;
         }
-        Fill(kind);
+        Fill(none ? "none" : kind);
         group.CheckedChange += (_, e) =>
         {
             if (!ids.TryGetValue(e.CheckedId, out var k)) return;
+            none = k == "none";
             negated = k.StartsWith('!');
             Fill(k.TrimStart('!'));
         };
