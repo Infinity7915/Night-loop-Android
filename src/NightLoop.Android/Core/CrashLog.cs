@@ -17,7 +17,8 @@ internal static class CrashLog
         _path = System.IO.Path.Combine(app.FilesDir!.AbsolutePath, "last-crash.txt");
         AndroidEnvironment.UnhandledExceptionRaiser += (_, e) => Write(e.Exception);
         AppDomain.CurrentDomain.UnhandledException += (_, e) => Write(e.ExceptionObject as Exception);
-        TaskScheduler.UnobservedTaskException += (_, e) => { Write(e.Exception); e.SetObserved(); };
+        // A forgotten background error (like a dropped connection) doesn't close the app, so it isn't a crash.
+        TaskScheduler.UnobservedTaskException += (_, e) => e.SetObserved();
     }
 
     private static void Write(Exception? ex)
