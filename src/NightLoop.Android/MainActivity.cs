@@ -290,7 +290,7 @@ public sealed class MainActivity : Activity
             .SetTitle("Delete account")!
             .SetView(box)!
             .SetNegativeButton("Cancel", (_, _) => { })!
-            .SetPositiveButton("Delete account", (EventHandler<DialogClickEventArgs>?)null)!
+            .SetPositiveButton("Delete account", (_, _) => { })!
             .Create()!;
         dialog.Show();
         var delete = dialog.GetButton((int)DialogButtonType.Positive)!;
