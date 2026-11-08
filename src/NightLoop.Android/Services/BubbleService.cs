@@ -18,10 +18,11 @@ namespace NightLoop.Mobile;
 /// The bubble gets a green ring while a macro is playing.
 /// </summary>
 [Service(Name = "win.nightloop.app.BubbleService", Exported = false,
-         ForegroundServiceType = ForegroundService.TypeSpecialUse)]
+         ForegroundServiceType = ForegroundService.TypeSpecialUse | ForegroundService.TypeMediaProjection)]
 public sealed class BubbleService : Service
 {
     public const string ActionStop = "win.nightloop.app.STOP_BUBBLE";
+    public const string ActionCapture = "win.nightloop.app.START_CAPTURE";
     private const string Channel = "nightloop_running";
     private const int NotificationId = 1;
 
@@ -43,7 +44,18 @@ public sealed class BubbleService : Service
             return StartCommandResult.NotSticky;
         }
         Night.Init(this);
-        StartAsForeground();
+        if (intent?.Action == ActionCapture)
+        {
+            // Android only hands over screen capture to a service that is already a screen-capture service.
+            StartAsForeground(capture: true);
+#pragma warning disable CS0618, CA1422
+            var data = OperatingSystem.IsAndroidVersionAtLeast(33)
+                ? intent.GetParcelableExtra("data", Java.Lang.Class.FromType(typeof(Intent))) as Intent
+                : intent.GetParcelableExtra("data") as Intent;
+#pragma warning restore CS0618, CA1422
+            if (data is not null) ScreenCapture.Instance.Start(this, intent.GetIntExtra("code", 0), data);
+        }
+        else StartAsForeground(capture: ScreenCapture.Ready);
         if (_bubble is null && Setup.Permissions.CanDrawOverlays(this)) ShowBubble();
         Running = true;
         return StartCommandResult.Sticky;
@@ -57,11 +69,12 @@ public sealed class BubbleService : Service
         ClosePanel();
         if (_bubble is not null) _windows?.RemoveView(_bubble);
         _bubble = null;
+        ScreenCapture.Instance.Stop();
         Running = false;
         base.OnDestroy();
     }
 
-    private void StartAsForeground()
+    private void StartAsForeground(bool capture)
     {
         var manager = (NotificationManager)GetSystemService(NotificationService)!;
         manager.CreateNotificationChannel(new NotificationChannel(Channel, "Night-loop running", NotificationImportance.Low));
@@ -80,7 +93,8 @@ public sealed class BubbleService : Service
             .Build();
 
         if (OperatingSystem.IsAndroidVersionAtLeast(34))
-            StartForeground(NotificationId, notification, ForegroundService.TypeSpecialUse);
+            StartForeground(NotificationId, notification,
+                capture ? ForegroundService.TypeSpecialUse | ForegroundService.TypeMediaProjection : ForegroundService.TypeSpecialUse);
         else
             StartForeground(NotificationId, notification);
     }

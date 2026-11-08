@@ -10,6 +10,8 @@
   <!-- Keeps the bubble (and later a running macro) alive, with a visible notification. -->
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+  <!-- Screen-reading blocks (Wait for text / image): Android's screen capture, asked each session. -->
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
   <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
   <!-- Auto-update: hand a downloaded Night-loop update to Android's installer (you confirm it). -->
   <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />

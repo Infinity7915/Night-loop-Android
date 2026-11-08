@@ -60,6 +60,8 @@ internal static class Night
         Runs = new RunManager(AccessibilityKeys.Instance)
         {
             Touch = AccessibilityTouch.Instance,
+            Screen = ScreenCapture.Instance,
+            Text = PhoneTextReader.Instance,
             Notify = message => OnMain(() => Screens.Ui.Toast(_app, message)),
             PlaySound = _ => OnMain(PlayDefaultSound),
             RunMacro = RunByNameAsync,
@@ -132,6 +134,11 @@ internal static class Night
     public static async Task<string?> PlayAsync(Guid id, MacroDoc doc)
     {
         if (!AccessibilityTouch.Ready) return "Turn on Night-loop in Accessibility settings first (see Set up).";
+        if (ScreenCapture.Needs(doc) && !ScreenCapture.Ready)
+        {
+            ScreenConsentActivity.Ask(_app);
+            return "This macro looks at the screen. Tap \"Start now\" in Android's window, then press Play again.";
+        }
         CompiledMacro compiled;
         try
         {

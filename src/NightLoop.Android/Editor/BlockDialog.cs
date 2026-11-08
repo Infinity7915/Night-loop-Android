@@ -169,7 +169,11 @@ internal static class BlockDialog
                 var input = Ui.Input(a, f.Label, copy.GetString(f.Key) ?? "",
                     f.Multiline ? InputTypes.ClassText | InputTypes.TextFlagMultiLine : InputTypes.ClassText);
                 body.AddView(input);
-                apply.Add(() => p[f.Key] = input.Text ?? "");
+                apply.Add(() =>
+                {
+                    if (f.Key == "failLabel" && string.IsNullOrWhiteSpace(input.Text)) p.Remove(f.Key);
+                    else p[f.Key] = input.Text ?? "";
+                });
                 break;
             }
             case BoolField f:
@@ -215,35 +219,270 @@ internal static class BlockDialog
                 apply.Add(() => p[f.Key] = name);
                 break;
             }
-            case ConditionField:
+            case PictureField:
             {
-                var c = copy.GetObject("condition");
-                var negated = BlockKinds.Str(c?["kind"]) == "not";
-                var inner = negated ? c!["condition"] as JsonObject : c;
-                if (inner is not null && BlockKinds.Str(inner["kind"]) is { } k && k != "appInFront")
+                var preview = Ui.Text(a, copy.GetString("imageData") is { Length: > 0 } ? "Picture saved. Pick again to change it." : "No picture yet.", 14, Palette.TextQuiet);
+                body.AddView(preview);
+                body.AddView(Ui.Button(a, "Pick picture on screen", () =>
                 {
-                    body.AddView(Ui.Text(a, "This check was made in another version and can't be changed here.", 14, Palette.TextQuiet));
-                    break;
-                }
-                var package = BlockKinds.Str(inner?["package"]) ?? "";
-                var button = Ui.Button(a, BlockKinds.AppName(package), () => { }, primary: false);
-                button.Click += (_, _) => AppPicker.Pick(a, picked =>
-                {
-                    package = picked;
-                    button.Text = BlockKinds.AppName(picked);
-                });
-                body.AddView(Ui.Text(a, "When this app is in front", 14, Palette.TextQuiet));
-                body.AddView(button);
-                var not = new CheckBox(a) { Text = "Check that it's NOT in front", Checked = negated };
-                not.SetTextColor(Palette.Text);
-                body.AddView(not);
-                apply.Add(() =>
-                {
-                    var check = new JsonObject { ["kind"] = "appInFront", ["package"] = package };
-                    p["condition"] = not.Checked ? new JsonObject { ["kind"] = "not", ["condition"] = check } : check;
-                });
+                    foreach (var w in apply) w();
+                    Current?.Dismiss();
+                    PickPicture(a, data =>
+                    {
+                        if (data is not null) p["imageData"] = data;
+                        Show(a, copy, isNew, done);
+                    });
+                }, primary: false));
                 break;
             }
+            case PixelField:
+            {
+                body.AddView(Ui.Text(a, $"{copy.GetInt("x", 0)}, {copy.GetInt("y", 0)} · {copy.GetString("color", "#FFFFFF")}", 14, Palette.Text));
+                body.AddView(Ui.Button(a, "Pick spot and color on screen", () =>
+                {
+                    foreach (var w in apply) w();
+                    Current?.Dismiss();
+                    PickPixel(a, picked =>
+                    {
+                        if (picked is { } px)
+                        {
+                            p["x"] = px.X;
+                            p["y"] = px.Y;
+                            p["color"] = px.Color;
+                        }
+                        Show(a, copy, isNew, done);
+                    });
+                }, primary: false));
+                break;
+            }
+            case ConditionField:
+                AddCondition(a, body, copy, apply, isNew, done);
+                break;
         }
+    }
+
+    private static readonly (string Kind, string Text)[] CheckKinds =
+    [
+        ("appInFront", "An app is in front"), ("textVisible", "Text is on screen"),
+        ("imageVisible", "A picture is on screen"), ("pixelColor", "A spot is a color"),
+    ];
+
+    private static void AddCondition(Context a, LinearLayout body, Block copy, List<Action> apply, bool isNew, Action<Block> done)
+    {
+        var p = copy.Params;
+        var c = copy.GetObject("condition");
+        var negated = BlockKinds.Str(c?["kind"]) == "not";
+        var inner = (negated ? c!["condition"] as JsonObject : c)?.DeepClone() as JsonObject ?? new JsonObject { ["kind"] = "appInFront", ["package"] = "" };
+        var kind = BlockKinds.Str(inner["kind"]) ?? "appInFront";
+        if (CheckKinds.All(k => k.Kind != kind))
+        {
+            body.AddView(Ui.Text(a, "This check was made in another version and can't be changed here.", 14, Palette.TextQuiet));
+            return;
+        }
+        var group = new RadioGroup(a) { Orientation = Orientation.Vertical };
+        var ids = new Dictionary<int, string>();
+        foreach (var (value, text) in CheckKinds)
+        {
+            var radio = new RadioButton(a) { Text = text, Id = global::Android.Views.View.GenerateViewId() };
+            radio.SetTextColor(Palette.Text);
+            ids[radio.Id] = value;
+            group.AddView(radio);
+            if (value == kind) radio.Checked = true;
+        }
+        body.AddView(group);
+        var details = Ui.Column(a, 0);
+        body.AddView(details);
+        var not = new CheckBox(a) { Text = "Check the opposite (NOT)", Checked = negated };
+        not.SetTextColor(Palette.Text);
+        body.AddView(not);
+
+        Func<JsonObject> read = () => inner;
+        void Fill(string k)
+        {
+            details.RemoveAllViews();
+            if (BlockKinds.Str(inner["kind"]) != k) inner = new JsonObject { ["kind"] = k };
+            switch (k)
+            {
+                case "appInFront":
+                {
+                    var package = BlockKinds.Str(inner["package"]) ?? "";
+                    var button = Ui.Button(a, BlockKinds.AppName(package), () => { }, primary: false);
+                    button.Click += (_, _) => AppPicker.Pick(a, picked =>
+                    {
+                        package = picked;
+                        button.Text = BlockKinds.AppName(picked);
+                    });
+                    details.AddView(button);
+                    read = () => new JsonObject { ["kind"] = "appInFront", ["package"] = package };
+                    break;
+                }
+                case "textVisible":
+                {
+                    var text = Ui.Input(a, "Text to look for", BlockKinds.Str(inner["text"]) ?? "");
+                    var exact = new CheckBox(a) { Text = "Exact words only", Checked = BlockKinds.Str(inner["match"]) == "exact" };
+                    exact.SetTextColor(Palette.Text);
+                    details.AddView(text);
+                    details.AddView(exact);
+                    read = () => new JsonObject { ["kind"] = "textVisible", ["text"] = text.Text ?? "", ["match"] = exact.Checked ? "exact" : "contains" };
+                    break;
+                }
+                case "imageVisible":
+                {
+                    var has = BlockKinds.Str(inner["imageData"]) is { Length: > 0 };
+                    details.AddView(Ui.Text(a, has ? "Picture saved." : "No picture yet.", 14, Palette.TextQuiet));
+                    var conf = Ui.Number(a, "Confidence % (90)", (inner["confidencePct"] as JsonValue)?.TryGetValue(out int cp) == true ? cp : null);
+                    var size = Ui.Number(a, "Size tolerance % (blank = automatic)", (inner["sizeTolerancePct"] as JsonValue)?.TryGetValue(out int sp) == true ? sp : null);
+                    var color = new CheckBox(a) { Text = "Match colors", Checked = !((inner["matchColor"] as JsonValue)?.TryGetValue(out bool mc) == true && !mc) };
+                    color.SetTextColor(Palette.Text);
+                    details.AddView(conf);
+                    details.AddView(size);
+                    details.AddView(color);
+                    read = () =>
+                    {
+                        var o = new JsonObject { ["kind"] = "imageVisible" };
+                        if (BlockKinds.Str(inner["imageData"]) is { } d) o["imageData"] = d;
+                        if (int.TryParse(conf.Text, out var cv)) o["confidencePct"] = cv;
+                        if (int.TryParse(size.Text, out var sv)) o["sizeTolerancePct"] = sv;
+                        if (!color.Checked) o["matchColor"] = false;
+                        return o;
+                    };
+                    details.AddView(Ui.Button(a, "Pick picture on screen", () =>
+                    {
+                        Save();
+                        Current?.Dismiss();
+                        PickPicture(a, data =>
+                        {
+                            if (data is not null && copy.GetObject("condition") is { } saved)
+                            {
+                                var target = BlockKinds.Str(saved["kind"]) == "not" ? saved["condition"] as JsonObject : saved;
+                                if (target is not null) target["imageData"] = data;
+                            }
+                            Show(a, copy, isNew, done);
+                        });
+                    }, primary: false));
+                    break;
+                }
+                case "pixelColor":
+                {
+                    var x = (inner["x"] as JsonValue)?.TryGetValue(out int xv) == true ? xv : 0;
+                    var y = (inner["y"] as JsonValue)?.TryGetValue(out int yv) == true ? yv : 0;
+                    var col = BlockKinds.Str(inner["color"]) ?? "#FFFFFF";
+                    var label = Ui.Text(a, $"{x}, {y} · {col}", 14, Palette.Text);
+                    var tol = Ui.Number(a, "Color tolerance (10)", (inner["tolerance"] as JsonValue)?.TryGetValue(out int tv) == true ? tv : null);
+                    details.AddView(label);
+                    details.AddView(tol);
+                    read = () =>
+                    {
+                        var o = new JsonObject { ["kind"] = "pixelColor", ["x"] = x, ["y"] = y, ["color"] = col };
+                        if (int.TryParse(tol.Text, out var t)) o["tolerance"] = t;
+                        return o;
+                    };
+                    details.AddView(Ui.Button(a, "Pick spot and color on screen", () =>
+                    {
+                        Save();
+                        Current?.Dismiss();
+                        PickPixel(a, picked =>
+                        {
+                            if (picked is { } px && copy.GetObject("condition") is { } saved)
+                            {
+                                var target = BlockKinds.Str(saved["kind"]) == "not" ? saved["condition"] as JsonObject : saved;
+                                if (target is not null)
+                                {
+                                    target["x"] = px.X;
+                                    target["y"] = px.Y;
+                                    target["color"] = px.Color;
+                                }
+                            }
+                            Show(a, copy, isNew, done);
+                        });
+                    }, primary: false));
+                    break;
+                }
+            }
+        }
+        void Save()
+        {
+            var check = read();
+            p["condition"] = not.Checked ? new JsonObject { ["kind"] = "not", ["condition"] = check } : check;
+        }
+        Fill(kind);
+        group.CheckedChange += (_, e) =>
+        {
+            if (ids.TryGetValue(e.CheckedId, out var k)) Fill(k);
+        };
+        apply.Add(Save);
+    }
+
+    /// <summary>Drag a box on the screen; the picture inside becomes the block's saved picture (null if cancelled).</summary>
+    private static void PickPicture(Context a, Action<string?> got)
+    {
+        if (!Core.ScreenCapture.Ready)
+        {
+            Core.ScreenConsentActivity.Ask(a);
+            Ui.Toast(a, "Tap \"Start now\" so Night-loop can see the screen, then pick the picture again.");
+            got(null);
+            return;
+        }
+        ScreenPicker.PickBox(a, "Drag a box around the picture", r =>
+        {
+            try
+            {
+                var image = Shrink(Core.ScreenCapture.Instance.Capture(r.Left, r.Top, r.Width, r.Height));
+                got(NightLoop.Engine.Screen.ImageTemplate.FromImage(image).Encode());
+            }
+            catch (Exception ex)
+            {
+                Ui.Toast(a, $"Couldn't take the picture: {ex.Message}");
+                got(null);
+            }
+        });
+    }
+
+    /// <summary>Pictures are at most 200 px a side; bigger boxes are scaled down (size tolerance finds them again).</summary>
+    private static NightLoop.Engine.Screen.ScreenImage Shrink(NightLoop.Engine.Screen.ScreenImage image)
+    {
+        var max = NightLoop.Engine.Screen.ImageTemplate.MaxSide;
+        if (image.Width <= max && image.Height <= max) return image;
+        var scale = Math.Min((double)max / image.Width, (double)max / image.Height);
+        var w = Math.Max(1, (int)(image.Width * scale));
+        var h = Math.Max(1, (int)(image.Height * scale));
+        var px = new byte[w * h * 4];
+        for (var y = 0; y < h; y++)
+        for (var x = 0; x < w; x++)
+        {
+            var sx = Math.Min(image.Width - 1, (int)(x / scale));
+            var sy = Math.Min(image.Height - 1, (int)(y / scale));
+            Array.Copy(image.Bgra, (sy * image.Width + sx) * 4, px, (y * w + x) * 4, 4);
+        }
+        return new NightLoop.Engine.Screen.ScreenImage(image.Left, image.Top, w, h, px);
+    }
+
+    /// <summary>Touch a spot; its position and current color come back (null if screen reading is off).</summary>
+    private static void PickPixel(Context a, Action<(int X, int Y, string Color)?> got)
+    {
+        if (!Core.ScreenCapture.Ready)
+        {
+            Core.ScreenConsentActivity.Ask(a);
+            Ui.Toast(a, "Tap \"Start now\" so Night-loop can see the screen, then pick the spot again.");
+            got(null);
+            return;
+        }
+        ScreenPicker.Pick(a, ["Touch the spot whose color to watch"], picked =>
+        {
+            var (x, y) = picked[0];
+            new global::Android.OS.Handler(global::Android.OS.Looper.MainLooper!).PostDelayed(() =>
+            {
+                try
+                {
+                    var c = Core.ScreenCapture.Instance.Capture(x, y, 1, 1)[0, 0];
+                    got((x, y, $"#{c.R:X2}{c.G:X2}{c.B:X2}"));
+                }
+                catch (Exception ex)
+                {
+                    Ui.Toast(a, $"Couldn't read the color: {ex.Message}");
+                    got(null);
+                }
+            }, 350);
+        });
     }
 }

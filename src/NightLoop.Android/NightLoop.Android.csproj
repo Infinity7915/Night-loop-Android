@@ -18,4 +18,8 @@
     <ProjectReference Include="..\..\external\night-loop\src\NightLoop.Client\NightLoop.Client.csproj" />
     <ProjectReference Include="..\..\external\night-loop\src\NightLoop.Engine\NightLoop.Engine.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- Reads text on the screen on the phone itself, offline (Wait for text, Text visible). -->
+    <PackageReference Include="Xamarin.Google.MLKit.TextRecognition" Version="116.0.1.9" />
+  </ItemGroup>
 </Project>
