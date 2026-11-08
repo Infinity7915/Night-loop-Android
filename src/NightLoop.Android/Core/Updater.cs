@@ -59,6 +59,13 @@ internal static class Updater
         && uri.AbsolutePath.StartsWith("/Infinity7915/Night-loop-Android/releases/download/", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Whether Android lets Night-loop install updates ("Install unknown apps").</summary>
+    /// <summary>Android's last answer to an update install, shown under Update now so a failed update says why.</summary>
+    public static string? LastResult(Context context) =>
+        context.GetSharedPreferences("nightloop", FileCreationMode.Private)!.GetString("last_install", null);
+
+    public static void SaveResult(Context context, string text) =>
+        context.GetSharedPreferences("nightloop", FileCreationMode.Private)!.Edit()!.PutString("last_install", text)!.Apply();
+
     public static bool CanInstall(Context context) => context.PackageManager!.CanRequestPackageInstalls();
 
     public static void OpenInstallPermission(Activity activity) =>
@@ -91,23 +98,13 @@ internal static class Updater
             }
         }
 
-        var installer = context.PackageManager!.PackageInstaller;
-        var parameters = new PackageInstaller.SessionParams(PackageInstallMode.FullInstall);
-        var sessionId = installer.CreateSession(parameters);
-        using var session = installer.OpenSession(sessionId);
-        var length = new FileInfo(file).Length;
-        await using (var source = File.OpenRead(file))
-        await using (var target = session.OpenWrite("base.apk", 0, length))
-        {
-            await source.CopyToAsync(target, ct);
-            session.Fsync(target);
-        }
-        // Android adds the result to this intent, so it must be mutable (the flag exists from Android 12).
-        var flags = OperatingSystem.IsAndroidVersionAtLeast(31)
-            ? PendingIntentFlags.UpdateCurrent | PendingIntentFlags.Mutable
-            : PendingIntentFlags.UpdateCurrent;
-        var result = PendingIntent.GetBroadcast(context, sessionId, new Intent(context, typeof(UpdateInstallResult)), flags)!;
-        session.Commit(result.IntentSender);
+        // Hand the file to Android's own installer, the same screen as opening the .apk yourself
+        // (an install session showed the confirm screen but then did nothing on some phones).
+        var uri = global::Android.Net.Uri.Parse($"content://{UpdateFileProvider.Authority}/{System.IO.Path.GetFileName(file)}")!;
+        var view = new Intent(Intent.ActionView)
+            .SetDataAndType(uri, "application/vnd.android.package-archive")
+            .AddFlags(ActivityFlags.GrantReadUriPermission | ActivityFlags.NewTask);
+        context.StartActivity(view);
     }
 }
 
@@ -119,6 +116,8 @@ public sealed class UpdateInstallResult : BroadcastReceiver
     {
         if (context is null || intent is null) return;
         var status = (PackageInstallStatus)intent.GetIntExtra(PackageInstaller.ExtraStatus, (int)PackageInstallStatus.Failure);
+        if (status != PackageInstallStatus.PendingUserAction)
+            Updater.SaveResult(context, $"{DateTime.Now:HH:mm} {status}: {intent.GetStringExtra(PackageInstaller.ExtraStatusMessage) ?? "no message"}");
         switch (status)
         {
             case PackageInstallStatus.PendingUserAction:
@@ -138,7 +137,8 @@ public sealed class UpdateInstallResult : BroadcastReceiver
                 context.StartActivity(new Intent(Intent.ActionView, global::Android.Net.Uri.Parse(Updater.ReleasesPage)).AddFlags(ActivityFlags.NewTask));
                 break;
             case PackageInstallStatus.FailureAborted:
-                break; // you tapped Cancel
+                Ui.Toast(context, "The update was cancelled.");
+                break;
             default:
                 Ui.Toast(context, $"The update didn't install: {intent.GetStringExtra(PackageInstaller.ExtraStatusMessage) ?? status.ToString()}");
                 break;
@@ -173,4 +173,29 @@ public sealed class UpdatedReceiver : BroadcastReceiver
             .Build();
         manager.Notify(7001, notification);
     }
+}
+
+/// <summary>Shares only the downloaded update .apk (cache/updates) with Android's installer, read-only.</summary>
+[ContentProvider([UpdateFileProvider.Authority], Name = "win.nightloop.app.UpdateFileProvider", Exported = false, GrantUriPermissions = true)]
+public sealed class UpdateFileProvider : ContentProvider
+{
+    public const string Authority = "win.nightloop.app.updates";
+
+    public override bool OnCreate() => true;
+
+    public override global::Android.OS.ParcelFileDescriptor? OpenFile(global::Android.Net.Uri uri, string mode)
+    {
+        if (mode != "r") throw new Java.Lang.SecurityException("Read only.");
+        var name = uri.LastPathSegment ?? "";
+        if (!System.Text.RegularExpressions.Regex.IsMatch(name, @"^Night-loop-[0-9.]+\.apk$"))
+            throw new Java.IO.FileNotFoundException(name);
+        var file = new Java.IO.File(new Java.IO.File(Context!.CacheDir, "updates"), name);
+        return global::Android.OS.ParcelFileDescriptor.Open(file, global::Android.OS.ParcelFileMode.ReadOnly);
+    }
+
+    public override string? GetType(global::Android.Net.Uri uri) => "application/vnd.android.package-archive";
+    public override global::Android.Database.ICursor? Query(global::Android.Net.Uri uri, string[]? projection, string? selection, string[]? selectionArgs, string? sortOrder) => null;
+    public override global::Android.Net.Uri? Insert(global::Android.Net.Uri uri, ContentValues? values) => null;
+    public override int Delete(global::Android.Net.Uri uri, string? selection, string[]? selectionArgs) => 0;
+    public override int Update(global::Android.Net.Uri uri, ContentValues? values, string? selection, string[]? selectionArgs) => 0;
 }
