@@ -103,6 +103,8 @@ internal sealed class DotEditor
     private View? _list;
     private int? _listX, _listY;
     private bool _isPlaying;
+    private bool _starting; // Play was pressed and the start delay is running
+    private bool _stopAfterStart; // ■ was pressed during that delay
     private bool _closed;
 
     public Guid MacroId => _id;
@@ -1056,6 +1058,7 @@ internal sealed class DotEditor
     {
         if (_isPlaying)
         {
+            if (_starting) _stopAfterStart = true;
             Night.Stop(_id);
             return;
         }
@@ -1071,13 +1074,31 @@ internal sealed class DotEditor
         CloseCard();
         CloseList();
         var copy = MacroJson.Deserialize(MacroJson.Serialize(_doc));
-        if (await Night.PlayAsync(_id, copy) is { } error)
+        // Make the dots see-through for touches BEFORE the first tap: each dot sits right where its tap lands, so a
+        // dot that is still touchable catches the first tap and the game never gets it.
+        SetPlaying(true);
+        _starting = true;
+        _stopAfterStart = false;
+        string? error;
+        try { error = await Night.PlayAsync(_id, copy); }
+        finally { _starting = false; }
+        if (_stopAfterStart)
         {
+            Night.Stop(_id);
+            SetPlaying(false);
+            return;
+        }
+        if (error is not null)
+        {
+            SetPlaying(false);
             Ui.Toast(C, error);
             return;
         }
-        if (Night.RunOf(_id) is not { } run) return;
-        SetPlaying(true);
+        if (Night.RunOf(_id) is not { } run)
+        {
+            SetPlaying(false);
+            return;
+        }
         run.StepChanged += OnStep;
         try { await run.Completion; }
         catch (Exception) { /* Night shows faults */ }
@@ -1105,7 +1126,7 @@ internal sealed class DotEditor
 
     private void OnRunsChanged()
     {
-        if (_isPlaying && !Night.IsRunning(_id)) SetPlaying(false);
+        if (_isPlaying && !_starting && !Night.IsRunning(_id)) SetPlaying(false);
     }
 
     private void SetPlaying(bool playing)
