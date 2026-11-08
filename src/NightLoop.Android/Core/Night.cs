@@ -118,10 +118,18 @@ internal static class Night
     public static bool IsRunning(Guid id) => RunsById.TryGetValue(id, out var run) && run.IsActive;
     public static bool AnyRunning => RunsById.Values.Any(r => r.IsActive);
 
+    /// <summary>
+    /// Why taps can't be sent. When the switch is on but Android isn't running the service (it stopped it, often
+    /// after an update or a crash), turning it off and on again restarts it.
+    /// </summary>
+    private static string AccessibilityOffMessage() => Setup.Permissions.AccessibilityOn(_app)
+        ? "Android stopped Night-loop's accessibility service. In Accessibility settings, turn Night-loop off and on again."
+        : "Turn on Night-loop in Accessibility settings first (see Set up).";
+
     /// <summary>Starts a saved Android macro (its draft if it was never saved). Returns why it can't, or null.</summary>
     public static async Task<string?> PlayAsync(Guid id)
     {
-        if (!AccessibilityTouch.Ready) return "Turn on Night-loop in Accessibility settings first (see Set up).";
+        if (!AccessibilityTouch.Ready) return AccessibilityOffMessage();
         try
         {
             var macro = await Api.GetMacroAsync(id);
@@ -139,7 +147,7 @@ internal static class Night
     /// <summary>Plays a document as it is (the editor's Play uses the copy on screen).</summary>
     public static async Task<string?> PlayAsync(Guid id, MacroDoc doc)
     {
-        if (!AccessibilityTouch.Ready) return "Turn on Night-loop in Accessibility settings first (see Set up).";
+        if (!AccessibilityTouch.Ready) return AccessibilityOffMessage();
         if (ScreenCapture.Needs(doc) && !ScreenCapture.Ready)
         {
             ScreenConsentActivity.Ask(_app);
