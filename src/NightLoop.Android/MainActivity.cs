@@ -24,11 +24,12 @@ namespace NightLoop.Mobile;
           ConfigurationChanges = ConfigChanges.Orientation | ConfigChanges.ScreenSize)]
 public sealed class MainActivity : Activity
 {
-    private enum Screen { Loading, SignIn, Code, Home, Settings }
+    private enum Screen { Loading, SignIn, SignUp, Code, Home, Settings }
 
     private Screen _screen = Screen.Loading;
     private Guid _challenge;
     private bool _unlocking;
+    private bool _signingUp;
     private string _codeEmail = "";
     private string _message = "";
     private string _email = "";
@@ -185,6 +186,7 @@ public sealed class MainActivity : Activity
         if (Night.Session.PendingUnlock is { } unlock)
         {
             _unlocking = true;
+            _signingUp = false;
             _challenge = unlock;
             _codeEmail = Night.Session.PendingUnlockEmail ?? "";
             _message = Night.Session.PendingUnlockError ?? "";
@@ -205,6 +207,7 @@ public sealed class MainActivity : Activity
                 if (result is SignInResult.NeedsCode code)
                 {
                     _unlocking = false;
+                    _signingUp = false;
                     _challenge = code.ChallengeId;
                     _codeEmail = email;
                     Show(Screen.Code);
@@ -228,6 +231,7 @@ public sealed class MainActivity : Activity
         try
         {
             if (_unlocking) await Night.Session.VerifyUnlockAsync(code);
+            else if (_signingUp) await Night.Session.VerifySignUpAsync(_challenge, code);
             else await Night.Session.VerifySignInAsync(_challenge, code, trust);
             RunOnUiThread(() =>
             {
@@ -284,6 +288,9 @@ public sealed class MainActivity : Activity
             case Screen.SignIn:
                 BuildSignIn(page);
                 break;
+            case Screen.SignUp:
+                BuildSignUp(page);
+                break;
             case Screen.Code:
                 BuildCode(page);
                 break;
@@ -296,7 +303,7 @@ public sealed class MainActivity : Activity
         }
         var root = Ui.Scroll(this, page);
         // Another app's see-through window over the sign-in or code screen can't pass taps through to it (tapjacking).
-        root.FilterTouchesWhenObscured = screen is Screen.SignIn or Screen.Code;
+        root.FilterTouchesWhenObscured = screen is Screen.SignIn or Screen.SignUp or Screen.Code;
         SetContentView(root);
         if (screen == Screen.Home)
         {
@@ -330,8 +337,95 @@ public sealed class MainActivity : Activity
         page.AddView(card);
         AddMessage(page);
         page.AddView(Ui.Text(this,
-            "Use your Night-loop account. One device can be signed in at a time, so signing in here signs Night-loop out on your PC. " +
-            "No account yet? Create one in Night-loop on your PC.", 13, Palette.TextQuiet));
+            "Use your Night-loop account. One device can be signed in at a time, so signing in here signs Night-loop out on your PC.", 13, Palette.TextQuiet));
+        page.AddView(Ui.Heading(this, "New to Night-loop?"));
+        page.AddView(Ui.Button(this, "Create an account", () =>
+        {
+            _message = "";
+            Show(Screen.SignUp);
+        }, primary: false));
+    }
+
+    private const string TermsUrl = "https://github.com/Infinity7915/Night-loop/blob/main/terms-of-service.md";
+    private const string PrivacyUrl = "https://github.com/Infinity7915/Night-loop/blob/main/privacy-policy.md";
+
+    /// <summary>Create an account, like the PC app's sign-up: email, password twice, the terms, then the emailed code.</summary>
+    private void BuildSignUp(LinearLayout page)
+    {
+        page.AddView(Ui.Heading(this, "Create an account"));
+        var card = Ui.Card(this);
+        var email = Ui.Input(this, "Email", _email, InputTypes.ClassText | InputTypes.TextVariationEmailAddress);
+        var password = Ui.Input(this, $"Password (at least {AccountRules.PasswordMinLength} characters)", "", InputTypes.ClassText | InputTypes.TextVariationPassword);
+        var confirm = Ui.Input(this, "Password again", "", InputTypes.ClassText | InputTypes.TextVariationPassword);
+        card.AddView(email);
+        card.AddView(password);
+        card.AddView(confirm);
+        var terms = new CheckBox(this) { Text = "I'm at least 13 and accept the Night-loop Terms of Service and Privacy Policy" };
+        terms.SetTextColor(Palette.Text);
+        card.AddView(terms);
+        var links = Ui.Row(this);
+        links.AddView(Ui.Button(this, "Terms of Service", () => OpenLink(TermsUrl), primary: false));
+        links.AddView(Ui.Button(this, "Privacy Policy", () => OpenLink(PrivacyUrl), primary: false));
+        card.AddView(links);
+        card.AddView(Ui.Text(this, "Macros created and stored in Night-loop are assets of Night-loop and aren't owned by the user (Terms of Service, section 5).", 12, Palette.TextQuiet));
+        Button? button = null;
+        button = Ui.Button(this, "Create account", () =>
+        {
+            _email = email.Text?.Trim() ?? "";
+            var pass = password.Text ?? "";
+            if (!AccountRules.IsValidEmail(_email)) _message = "Enter a valid email address.";
+            else if (AccountRules.PasswordProblem(pass, _email) is { } problem) _message = problem;
+            else if (pass != confirm.Text) _message = "The passwords don't match.";
+            else if (!terms.Checked) _message = "Accept the terms to create an account.";
+            else
+            {
+                _ = SignUpAsync(_email, pass, button!);
+                return;
+            }
+            Ui.Toast(this, _message); // keep what was typed
+            _message = "";
+        });
+        card.AddView(button);
+        page.AddView(card);
+        AddMessage(page);
+        page.AddView(Ui.Text(this, "We'll email you a 6-digit code to check it's your address. Your username is made for you; change it later in Night-loop on your PC.", 13, Palette.TextQuiet));
+        page.AddView(Ui.Button(this, "I already have an account", () =>
+        {
+            _message = "";
+            Show(Screen.SignIn);
+        }, primary: false));
+    }
+
+    private void OpenLink(string url)
+    {
+        try { StartActivity(new Intent(Intent.ActionView, global::Android.Net.Uri.Parse(url))); }
+        catch (ActivityNotFoundException) { Ui.Toast(this, url); }
+    }
+
+    private async Task SignUpAsync(string email, string password, Button button)
+    {
+        button.Enabled = false;
+        try
+        {
+            var challenge = await Night.Session.SignUpAsync(email, password, acceptedTerms: true);
+            RunOnUiThread(() =>
+            {
+                _message = "";
+                _unlocking = false;
+                _signingUp = true;
+                _challenge = challenge;
+                _codeEmail = email;
+                Show(Screen.Code);
+            });
+        }
+        catch (Exception ex) when (ex is ApiException or ServerUnreachableException)
+        {
+            RunOnUiThread(() =>
+            {
+                _message = ex.Message;
+                Show(Screen.SignUp);
+            });
+        }
     }
 
     private void BuildCode(LinearLayout page)
@@ -343,7 +437,7 @@ public sealed class MainActivity : Activity
         card.AddView(code);
         var trust = new CheckBox(this) { Text = "Trust this phone (skip the code next time)", Checked = true };
         trust.SetTextColor(Palette.Text);
-        if (!_unlocking) card.AddView(trust);
+        if (!_unlocking && !_signingUp) card.AddView(trust);
         Button? verify = null;
         verify = Ui.Button(this, "Continue", () =>
         {
@@ -359,7 +453,7 @@ public sealed class MainActivity : Activity
         page.AddView(Ui.Button(this, "Back", () =>
         {
             _message = "";
-            Show(Screen.SignIn);
+            Show(_signingUp ? Screen.SignUp : Screen.SignIn);
         }, primary: false));
     }
 
