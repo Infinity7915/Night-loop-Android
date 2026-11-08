@@ -14,7 +14,7 @@ internal sealed class PhoneTextReader : ITextReader
 
     private ITextRecognizer? _recognizer;
 
-    public async Task<IReadOnlyList<TextLine>> ReadAsync(ScreenImage image, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<TextLine>> ReadAsync(ScreenImage image, System.Threading.CancellationToken cancellationToken)
     {
         _recognizer ??= TextRecognition.GetClient(TextRecognizerOptions.DefaultOptions);
         var pixels = new int[image.Width * image.Height];
