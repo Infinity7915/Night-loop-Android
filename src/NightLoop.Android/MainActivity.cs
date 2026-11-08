@@ -95,6 +95,8 @@ public sealed class MainActivity : Activity
         var button = Ui.Button(this, "Update now", () => { });
         button.Click += (_, _) => _ = InstallUpdateAsync(update, button, note);
         card.AddView(button);
+        if (Updater.LastResult(this) is { } last)
+            card.AddView(Ui.Text(this, $"Last try: {last}", 12, Palette.Warn));
         _updateBox.AddView(card);
     }
 

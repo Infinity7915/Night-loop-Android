@@ -59,6 +59,13 @@ internal static class Updater
         && uri.AbsolutePath.StartsWith("/Infinity7915/Night-loop-Android/releases/download/", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Whether Android lets Night-loop install updates ("Install unknown apps").</summary>
+    /// <summary>Android's last answer to an update install, shown under Update now so a failed update says why.</summary>
+    public static string? LastResult(Context context) =>
+        context.GetSharedPreferences("nightloop", FileCreationMode.Private)!.GetString("last_install", null);
+
+    public static void SaveResult(Context context, string text) =>
+        context.GetSharedPreferences("nightloop", FileCreationMode.Private)!.Edit()!.PutString("last_install", text)!.Apply();
+
     public static bool CanInstall(Context context) => context.PackageManager!.CanRequestPackageInstalls();
 
     public static void OpenInstallPermission(Activity activity) =>
@@ -119,6 +126,8 @@ public sealed class UpdateInstallResult : BroadcastReceiver
     {
         if (context is null || intent is null) return;
         var status = (PackageInstallStatus)intent.GetIntExtra(PackageInstaller.ExtraStatus, (int)PackageInstallStatus.Failure);
+        if (status != PackageInstallStatus.PendingUserAction)
+            Updater.SaveResult(context, $"{DateTime.Now:HH:mm} {status}: {intent.GetStringExtra(PackageInstaller.ExtraStatusMessage) ?? "no message"}");
         switch (status)
         {
             case PackageInstallStatus.PendingUserAction:
@@ -138,7 +147,8 @@ public sealed class UpdateInstallResult : BroadcastReceiver
                 context.StartActivity(new Intent(Intent.ActionView, global::Android.Net.Uri.Parse(Updater.ReleasesPage)).AddFlags(ActivityFlags.NewTask));
                 break;
             case PackageInstallStatus.FailureAborted:
-                break; // you tapped Cancel
+                Ui.Toast(context, "The update was cancelled.");
+                break;
             default:
                 Ui.Toast(context, $"The update didn't install: {intent.GetStringExtra(PackageInstaller.ExtraStatusMessage) ?? status.ToString()}");
                 break;
