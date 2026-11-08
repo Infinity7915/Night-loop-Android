@@ -36,18 +36,24 @@ public static class Permissions
 
     public static IReadOnlyList<SetupStep> Steps(Context context)
     {
-        var restricted = OperatingSystem.IsAndroidVersionAtLeast(33)
-            ? " If Android says the setting is restricted, open Night-loop's App info, tap the ⋮ menu, choose \"Allow restricted settings\", then try again."
-            : "";
         return
         [
+            .. (OperatingSystem.IsAndroidVersionAtLeast(33)
+                ? new[]
+                {
+                    new SetupStep("Allow restricted settings",
+                        "Android blocks the accessibility switch for apps installed from a file. Tap Open, then the 3 dots at the top right of App info, then \"Allow restricted settings\", and confirm with your PIN or fingerprint.",
+                        AccessibilityOn(context),
+                        OpenAppInfo),
+                }
+                : []),
             new("Display over other apps",
                 "Shows the floating Night-loop bubble on top of other apps and the home screen.",
                 CanDrawOverlays(context),
                 a => a.StartActivity(new Intent(Settings.ActionManageOverlayPermission,
                     global::Android.Net.Uri.Parse("package:" + a.PackageName)))),
             new("Night-loop accessibility service",
-                "Lets macros tap, swipe and press Back or Home for you. Night-loop only acts while a macro you started is playing." + restricted,
+                "Lets macros tap, swipe and press Back or Home for you. Night-loop only acts while a macro you started is playing.",
                 AccessibilityOn(context),
                 a => a.StartActivity(new Intent(Settings.ActionAccessibilitySettings))),
             new("Notifications",
@@ -55,9 +61,22 @@ public static class Permissions
                 NotificationsOn(context),
                 a =>
                 {
-                    if (OperatingSystem.IsAndroidVersionAtLeast(33))
+                    // Once refused twice Android stops asking, so open Night-loop's notification settings instead.
+                    if (OperatingSystem.IsAndroidVersionAtLeast(33) && a.ShouldShowRequestPermissionRationale(Manifest.Permission.PostNotifications) is var again
+                        && (again || !_askedNotifications))
+                    {
+                        _askedNotifications = true;
                         a.RequestPermissions([Manifest.Permission.PostNotifications], NotificationsRequest);
+                    }
+                    else
+                        a.StartActivity(new Intent(Settings.ActionAppNotificationSettings).PutExtra(Settings.ExtraAppPackage, a.PackageName));
                 }),
         ];
     }
+
+    private static bool _askedNotifications;
+
+    /// <summary>Night-loop's App info page (its ⋮ menu has "Allow restricted settings").</summary>
+    public static void OpenAppInfo(Activity a) =>
+        a.StartActivity(new Intent(Settings.ActionApplicationDetailsSettings, global::Android.Net.Uri.Parse("package:" + a.PackageName)));
 }

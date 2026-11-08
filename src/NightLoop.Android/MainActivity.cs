@@ -276,6 +276,44 @@ public sealed class MainActivity : Activity
         }
     }
 
+    /// <summary>Like the PC app: confirm with the password, then the account and its macros are removed.</summary>
+    private void AskDeleteAccount()
+    {
+        var box = Ui.Column(this, Palette.Dp(this, 20));
+        box.AddView(Ui.Text(this, "Your account and every macro on it are removed. You have 30 days to change your mind by contacting support; after that it's gone for good.", 14, Palette.Text));
+        var password = Ui.Input(this, "Your password", type: InputTypes.ClassText | InputTypes.TextVariationPassword);
+        password.FilterTouchesWhenObscured = true;
+        box.AddView(password);
+        var error = Ui.Text(this, "", 13, Palette.Warn);
+        box.AddView(error);
+        var dialog = Dialogs.Builder(this)
+            .SetTitle("Delete account")!
+            .SetView(box)!
+            .SetNegativeButton("Cancel", (_, _) => { })!
+            .SetPositiveButton("Delete account", (EventHandler<DialogClickEventArgs>?)null)!
+            .Create()!;
+        dialog.Show();
+        var delete = dialog.GetButton((int)DialogButtonType.Positive)!;
+        delete.FilterTouchesWhenObscured = true;
+        delete.Click += async (_, _) =>
+        {
+            if (string.IsNullOrEmpty(password.Text)) { error.Text = "Enter your password."; return; }
+            delete.Enabled = false;
+            try
+            {
+                await Night.Api.DeleteAccountAsync(password.Text!);
+                dialog.Dismiss();
+                await SignOutAsync();
+                Ui.Toast(this, "Your account was deleted.");
+            }
+            catch (Exception ex) when (ex is ApiException or ServerUnreachableException)
+            {
+                error.Text = ex.Message;
+                delete.Enabled = true;
+            }
+        };
+    }
+
     private async Task SignOutAsync()
     {
         Night.StopAll();
@@ -570,6 +608,7 @@ public sealed class MainActivity : Activity
         buttons.AddView(Ui.Button(this, "Download my data", () => _ = DownloadDataAsync(), primary: false));
         buttons.AddView(Ui.Button(this, "Sign out", () => _ = SignOutAsync(), primary: false));
         account.AddView(buttons);
+        account.AddView(Ui.Button(this, "Delete account", AskDeleteAccount, primary: false));
         page.AddView(account);
 
         page.AddView(Ui.Heading(this, "Permissions"));
