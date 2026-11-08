@@ -8,8 +8,8 @@
     <ApplicationId>win.nightloop.app</ApplicationId>
     <ApplicationTitle>Night-loop</ApplicationTitle>
     <!-- versionCode must go up with every release; versionName is what people see. -->
-    <ApplicationVersion>1</ApplicationVersion>
-    <ApplicationDisplayVersion>0.1.0</ApplicationDisplayVersion>
+    <ApplicationVersion>200</ApplicationVersion>
+    <ApplicationDisplayVersion>0.2.0</ApplicationDisplayVersion>
     <AndroidPackageFormat>apk</AndroidPackageFormat>
   </PropertyGroup>
   <ItemGroup>

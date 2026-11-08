@@ -7,12 +7,15 @@ using Android.OS;
 using Android.Runtime;
 using Android.Views;
 using Android.Widget;
+using NightLoop.Mobile.Core;
+using NightLoop.Mobile.Screens;
 
 namespace NightLoop.Mobile;
 
 /// <summary>
 /// Keeps the floating Night-loop bubble on screen above other apps, as a foreground service with a "running"
-/// notification. Drag the bubble anywhere; tap it to open Night-loop. In phase 2 a tap opens the macro panel.
+/// notification. Drag the bubble anywhere; tap it to open the macro panel, where your Android macros play and stop.
+/// The bubble gets a green ring while a macro is playing.
 /// </summary>
 [Service(Name = "win.nightloop.app.BubbleService", Exported = false,
          ForegroundServiceType = ForegroundService.TypeSpecialUse)]
@@ -26,6 +29,9 @@ public sealed class BubbleService : Service
 
     private IWindowManager? _windows;
     private View? _bubble;
+    private WindowManagerLayoutParams? _bubbleLayout;
+    private LinearLayout? _panel;
+    private LinearLayout? _panelList;
 
     public override IBinder? OnBind(Intent? intent) => null;
 
@@ -36,6 +42,7 @@ public sealed class BubbleService : Service
             StopSelf();
             return StartCommandResult.NotSticky;
         }
+        Night.Init(this);
         StartAsForeground();
         if (_bubble is null && Setup.Permissions.CanDrawOverlays(this)) ShowBubble();
         Running = true;
@@ -44,6 +51,9 @@ public sealed class BubbleService : Service
 
     public override void OnDestroy()
     {
+        Night.RunsChanged -= OnRunsChanged;
+        Night.MacrosChanged -= FillPanel;
+        ClosePanel();
         if (_bubble is not null) _windows?.RemoveView(_bubble);
         _bubble = null;
         Running = false;
@@ -95,12 +105,120 @@ public sealed class BubbleService : Service
         bubble.SetOnTouchListener(new BubbleDrag(this, layout));
         _windows.AddView(bubble, layout);
         _bubble = bubble;
+        _bubbleLayout = layout;
+        Night.RunsChanged += OnRunsChanged;
+        Night.MacrosChanged += FillPanel;
+        OnRunsChanged();
+    }
+
+    private void OnRunsChanged()
+    {
+        if (_bubble is ImageView bubble)
+        {
+            var pad = Palette.Dp(this, 3);
+            bubble.SetPadding(pad, pad, pad, pad);
+            bubble.Background = Night.AnyRunning ? Ui.Rounded(this, Color.Transparent, 28, Palette.Good) : null;
+            if (Night.AnyRunning && bubble.Background is GradientDrawable ring) ring.SetStroke(Palette.Dp(this, 3), Palette.Good);
+        }
+        FillPanel();
+    }
+
+    // ---- The macro panel ----
+
+    private void TogglePanel()
+    {
+        if (_panel is not null)
+        {
+            ClosePanel();
+            return;
+        }
+        var panel = Ui.Column(this, Palette.Dp(this, 12));
+        panel.Background = Ui.Rounded(this, Palette.Surface, 14, Palette.Border);
+        var top = Ui.Row(this);
+        top.AddView(Ui.Fill(Ui.Text(this, "Night-loop", 16, Palette.Text, bold: true)));
+        top.AddView(Ui.Small(this, "⌂", OpenApp, "Open Night-loop"));
+        top.AddView(Ui.Small(this, "✕", ClosePanel, "Close"));
+        panel.AddView(top);
+        _panelList = Ui.Column(this, 0);
+        var scroll = new ScrollView(this);
+        scroll.AddView(_panelList);
+        panel.AddView(scroll, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent));
+
+        var metrics = Resources!.DisplayMetrics!;
+        var width = Math.Min(Palette.Dp(this, 300), metrics.WidthPixels - Palette.Dp(this, 24));
+        var layout = new WindowManagerLayoutParams(width, ViewGroup.LayoutParams.WrapContent,
+            WindowManagerTypes.ApplicationOverlay, WindowManagerFlags.NotFocusable, Format.Translucent)
+        {
+            Gravity = GravityFlags.Top | GravityFlags.Start,
+            X = Math.Clamp((_bubbleLayout?.X ?? 0), Palette.Dp(this, 12), metrics.WidthPixels - width - Palette.Dp(this, 12)),
+            Y = (_bubbleLayout?.Y ?? 0) + Palette.Dp(this, 64),
+        };
+        _windows!.AddView(panel, layout);
+        _panel = panel;
+        FillPanel();
+        if (Night.Session.IsSignedIn) _ = RefreshAsync();
+    }
+
+    private static async Task RefreshAsync()
+    {
+        try { await Night.RefreshMacrosAsync(); }
+        catch (Exception ex) when (ex is Client.ApiException or Client.ServerUnreachableException) { }
+    }
+
+    private void FillPanel()
+    {
+        if (_panelList is null) return;
+        _panelList.RemoveAllViews();
+        if (!Night.Session.IsSignedIn)
+        {
+            _panelList.AddView(Ui.Text(this, "Sign in to Night-loop to play your macros.", 14, Palette.TextQuiet));
+            _panelList.AddView(Ui.Button(this, "Open Night-loop", OpenApp));
+            return;
+        }
+        var macros = Night.AndroidMacros.ToList();
+        if (macros.Count == 0)
+            _panelList.AddView(Ui.Text(this, "No Android macros yet. Make one in Night-loop.", 14, Palette.TextQuiet));
+        foreach (var macro in macros)
+        {
+            var row = Ui.Row(this);
+            row.SetPadding(0, Palette.Dp(this, 6), 0, 0);
+            var running = Night.IsRunning(macro.Id);
+            row.AddView(Ui.Fill(Ui.Text(this, macro.Name, 15, running ? Palette.Good : Palette.Text, bold: running)));
+            var id = macro.Id;
+            row.AddView(running
+                ? Ui.Small(this, "■", () => Night.Stop(id), $"Stop {macro.Name}")
+                : Ui.Small(this, "▶", () => _ = PlayAsync(id), $"Play {macro.Name}"));
+            _panelList.AddView(row);
+        }
+        if (Night.AnyRunning) _panelList.AddView(Ui.Button(this, "Stop all", Night.StopAll, primary: false));
+    }
+
+    private async Task PlayAsync(Guid id)
+    {
+        var error = await Night.PlayAsync(id);
+        Night.OnMain(() =>
+        {
+            if (error is not null) Ui.Toast(this, error);
+            else ClosePanel(); // out of the way of the taps
+        });
+    }
+
+    private void ClosePanel()
+    {
+        if (_panel is not null) _windows?.RemoveView(_panel);
+        _panel = null;
+        _panelList = null;
+    }
+
+    private void OpenApp()
+    {
+        ClosePanel();
+        StartActivity(new Intent(this, typeof(MainActivity)).AddFlags(ActivityFlags.NewTask | ActivityFlags.ReorderToFront));
     }
 
     internal void Move(View view, WindowManagerLayoutParams layout) => _windows?.UpdateViewLayout(view, layout);
 
-    internal void BubbleTapped() =>
-        StartActivity(new Intent(this, typeof(MainActivity)).AddFlags(ActivityFlags.NewTask | ActivityFlags.ReorderToFront));
+    internal void BubbleTapped() => TogglePanel();
 
     /// <summary>Drags the bubble with the finger; a touch that hardly moves counts as a tap.</summary>
     private sealed class BubbleDrag(BubbleService service, WindowManagerLayoutParams layout) : Java.Lang.Object, View.IOnTouchListener

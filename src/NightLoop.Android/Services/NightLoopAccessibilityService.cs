@@ -5,8 +5,8 @@ using Android.Views.Accessibility;
 namespace NightLoop.Mobile;
 
 /// <summary>
-/// The service Android lets perform taps and swipes on other apps. Phase 1 only connects it, so the setup screen
-/// can show it as on, and remembers which app is in front; macros start sending gestures through it in phase 2.
+/// The service Android lets perform taps and swipes on other apps. Macros send their gestures and Back/Home
+/// presses through it (Core/AccessibilityTouch), and it remembers which app is in front for "Wait for app".
 /// </summary>
 [Service(Name = JavaName, Label = "Night-loop", Exported = true,
          Permission = "android.permission.BIND_ACCESSIBILITY_SERVICE")]
@@ -30,8 +30,10 @@ public sealed class NightLoopAccessibilityService : AccessibilityService
 
     public override void OnAccessibilityEvent(AccessibilityEvent? e)
     {
-        if (e?.EventType == EventTypes.WindowStateChanged && e.PackageName is { } package)
-            ForegroundPackage = package;
+        if (e?.EventType != EventTypes.WindowStateChanged || e.PackageName is not { } package) return;
+        // Night-loop's own bubble, panel and pickers aren't "the app in front"; its screens are.
+        if (package == PackageName && e.ClassName?.StartsWith("win.nightloop.app.", StringComparison.Ordinal) != true) return;
+        ForegroundPackage = package;
     }
 
     public override void OnInterrupt() { }
