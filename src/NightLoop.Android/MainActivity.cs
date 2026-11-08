@@ -276,6 +276,44 @@ public sealed class MainActivity : Activity
         }
     }
 
+    /// <summary>Like the PC app: confirm with the password, then the account and its macros are removed.</summary>
+    private void AskDeleteAccount()
+    {
+        var box = Ui.Column(this, Palette.Dp(this, 20));
+        box.AddView(Ui.Text(this, "Your account and every macro on it are removed. You have 30 days to change your mind by contacting support; after that it's gone for good.", 14, Palette.Text));
+        var password = Ui.Input(this, "Your password", type: InputTypes.ClassText | InputTypes.TextVariationPassword);
+        password.FilterTouchesWhenObscured = true;
+        box.AddView(password);
+        var error = Ui.Text(this, "", 13, Palette.Warn);
+        box.AddView(error);
+        var dialog = Dialogs.Builder(this)
+            .SetTitle("Delete account")!
+            .SetView(box)!
+            .SetNegativeButton("Cancel", (_, _) => { })!
+            .SetPositiveButton("Delete account", (_, _) => { })!
+            .Create()!;
+        dialog.Show();
+        var delete = dialog.GetButton((int)DialogButtonType.Positive)!;
+        delete.FilterTouchesWhenObscured = true;
+        delete.Click += async (_, _) =>
+        {
+            if (string.IsNullOrEmpty(password.Text)) { error.Text = "Enter your password."; return; }
+            delete.Enabled = false;
+            try
+            {
+                await Night.Api.DeleteAccountAsync(password.Text!);
+                dialog.Dismiss();
+                await SignOutAsync();
+                Ui.Toast(this, "Your account was deleted.");
+            }
+            catch (Exception ex) when (ex is ApiException or ServerUnreachableException)
+            {
+                error.Text = ex.Message;
+                delete.Enabled = true;
+            }
+        };
+    }
+
     private async Task SignOutAsync()
     {
         Night.StopAll();
@@ -570,6 +608,7 @@ public sealed class MainActivity : Activity
         buttons.AddView(Ui.Button(this, "Download my data", () => _ = DownloadDataAsync(), primary: false));
         buttons.AddView(Ui.Button(this, "Sign out", () => _ = SignOutAsync(), primary: false));
         account.AddView(buttons);
+        account.AddView(Ui.Button(this, "Delete account", AskDeleteAccount, primary: false));
         page.AddView(account);
 
         page.AddView(Ui.Heading(this, "Permissions"));
@@ -581,6 +620,7 @@ public sealed class MainActivity : Activity
             row.AddView(Ui.Text(this, step.Done ? "On" : "Off", 14, step.Done ? Palette.Good : Palette.Warn, bold: true));
             row.AddView(Ui.Button(this, "Open", () => step.Open(this), primary: false));
             permissions.AddView(row);
+            if (step.HelpLink is not null) permissions.AddView(HelpLink(step));
         }
         page.AddView(permissions);
 
@@ -684,6 +724,7 @@ public sealed class MainActivity : Activity
             top.AddView(Ui.Text(this, "Off", 14, Palette.Warn, bold: true));
             card.AddView(top);
             card.AddView(Ui.Text(this, step.Why, 14, Palette.TextQuiet));
+            if (step.HelpLink is not null) card.AddView(HelpLink(step));
             card.AddView(Ui.Button(this, "Turn on", () => step.Open(this)));
             _steps.AddView(card);
         }
@@ -810,5 +851,15 @@ public sealed class MainActivity : Activity
         };
         card.AddView(box);
         card.AddView(Ui.Text(this, $"0 – {LocalSettings.WaitAfterMaxMs} ms. Default 0.", 12, Palette.TextQuiet));
+    }
+
+    /// <summary>Link-blue text under a step that opens its tutorial on GitHub.</summary>
+    private TextView HelpLink(SetupStep step)
+    {
+        var link = Ui.Text(this, step.HelpText ?? "Watch how", 13, Android.Graphics.Color.ParseColor("#4EA1FF"));
+        link.PaintFlags |= Android.Graphics.PaintFlags.UnderlineText;
+        link.Clickable = true;
+        link.Click += (_, _) => StartActivity(new Intent(Intent.ActionView, global::Android.Net.Uri.Parse(step.HelpLink)));
+        return link;
     }
 }

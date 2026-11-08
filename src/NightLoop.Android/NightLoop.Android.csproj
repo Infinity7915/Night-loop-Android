@@ -11,6 +11,8 @@
     <ApplicationVersion>501</ApplicationVersion>
     <ApplicationDisplayVersion>0.5.1</ApplicationDisplayVersion>
     <AndroidPackageFormat>apk</AndroidPackageFormat>
+    <!-- Phones (32/64-bit ARM) and 64-bit emulators like MuMu. 32-bit x86 emulators are dropped to keep the .apk smaller. -->
+    <RuntimeIdentifiers>android-arm;android-arm64;android-x64</RuntimeIdentifiers>
   </PropertyGroup>
   <ItemGroup>
     <!-- Shared with the PC app and the server: macro rules, API client, macro engine core. -->
