@@ -117,7 +117,7 @@ public sealed class BubbleService : Service
         _windows = GetSystemService(WindowService)!.JavaCast<IWindowManager>();
         var size = (int)(56 * Resources!.DisplayMetrics!.Density);
         var bubble = new ImageView(this);
-        bubble.SetImageResource(Resource.Drawable.ic_nightloop);
+        bubble.SetImageResource(Seasons.Icon);
         bubble.SetScaleType(ImageView.ScaleType.FitCenter);
         bubble.ContentDescription = "Night-loop";
 

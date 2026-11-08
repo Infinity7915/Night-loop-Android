@@ -18,7 +18,7 @@ namespace NightLoop.Mobile;
 /// Night-loop's main screen: sign in (with the emailed code), then the setup checklist, the bubble switch and the
 /// macro list. Android macros play and open in the editor; PC macros are listed as "PC only".
 /// </summary>
-[Activity(Name = "win.nightloop.app.MainActivity", Label = "Night-loop", MainLauncher = true, Exported = true,
+[Activity(Name = "win.nightloop.app.MainActivity", Label = "Night-loop", Exported = true,
           LaunchMode = LaunchMode.SingleTop, Icon = "@drawable/ic_nightloop",
           WindowSoftInputMode = SoftInput.AdjustResize,
           ConfigurationChanges = ConfigChanges.Orientation | ConfigChanges.ScreenSize)]
@@ -48,6 +48,7 @@ public sealed class MainActivity : Activity
     {
         base.OnCreate(savedInstanceState);
         Night.Init(this);
+        Seasons.ApplyLauncherIcon(this);
         Night.MacrosChanged += OnMacrosChanged;
         Night.RunsChanged += OnMacrosChanged;
         Night.SignedOut += OnSignedOut;
@@ -596,6 +597,23 @@ public sealed class MainActivity : Activity
             () => LocalSettings.WaitAfterTapsMs, v => LocalSettings.WaitAfterTapsMs = v);
         AddWait(playing, "Wait after every block (ms): a pause after each step. Taps that wait 0 skip it.",
             () => LocalSettings.WaitAfterBlocksMs, v => LocalSettings.WaitAfterBlocksMs = v);
+<<<<<<< Updated upstream
+=======
+        var follow = new global::Android.Widget.Switch(this) { Text = "Follow the playing step: with the ☰ step list open, the step being played is highlighted and kept in the middle of the list.", Checked = LocalSettings.FollowPlayingStep };
+        follow.SetTextColor(Palette.Text);
+        follow.SetPadding(0, Palette.Dp(this, 8), 0, Palette.Dp(this, 8));
+        follow.CheckedChange += (_, e) => LocalSettings.FollowPlayingStep = e.IsChecked;
+        playing.AddView(follow);
+        var seasonal = new global::Android.Widget.Switch(this) { Text = "Seasonal themes: around holidays (Christmas week, Halloween, Valentine's and more) Night-loop's icon and bubble dress up for the season.", Checked = LocalSettings.SeasonalThemes };
+        seasonal.SetTextColor(Palette.Text);
+        seasonal.SetPadding(0, Palette.Dp(this, 8), 0, Palette.Dp(this, 8));
+        seasonal.CheckedChange += (_, e) =>
+        {
+            LocalSettings.SeasonalThemes = e.IsChecked;
+            Seasons.ApplyLauncherIcon(this);
+        };
+        playing.AddView(seasonal);
+>>>>>>> Stashed changes
         page.AddView(playing);
 
         page.AddView(Ui.Heading(this, "Account"));
