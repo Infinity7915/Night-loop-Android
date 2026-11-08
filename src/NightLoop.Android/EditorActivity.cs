@@ -47,6 +47,11 @@ public sealed class EditorActivity : Activity
         }
         var page = Ui.Column(this, Palette.Dp(this, 16));
         var top = Ui.Row(this);
+        var back = Ui.Small(this, "← Back", GoHome, "Back to the home page");
+        back.LayoutParameters!.Width = ViewGroup.LayoutParams.WrapContent;
+        back.SetPadding(Palette.Dp(this, 12), 0, Palette.Dp(this, 12), 0);
+        top.AddView(back);
+        top.AddView(new Space(this), new LinearLayout.LayoutParams(Palette.Dp(this, 10), 1));
         _title = Ui.Text(this, "Loading…", 22, Palette.Text, bold: true);
         top.AddView(Ui.Fill(_title));
         top.AddView(Ui.Small(this, "✎", Rename, "Rename"));
@@ -80,6 +85,13 @@ public sealed class EditorActivity : Activity
 
         Night.RunsChanged += UpdatePlay;
         _ = LoadAsync();
+    }
+
+    /// <summary>Back to the home page. The draft is flushed on pause, like the system Back.</summary>
+    private void GoHome()
+    {
+        StartActivity(new Intent(this, typeof(MainActivity)).AddFlags(ActivityFlags.ClearTop | ActivityFlags.SingleTop));
+        Finish();
     }
 
     protected override void OnPause()
