@@ -41,8 +41,6 @@ internal static class LocalSettings
         set => _prefs?.Edit()!.PutBoolean("hide_dots_playing", value)!.Apply();
     }
 
-<<<<<<< Updated upstream
-=======
     /// <summary>Settings switch: seasonal icons around holidays (see <see cref="Seasons"/>). Off until turned on.</summary>
     public static bool SeasonalThemes
     {
@@ -64,7 +62,6 @@ internal static class LocalSettings
         set => _prefs?.Edit()!.PutBoolean("follow_playing_step", value)!.Apply();
     }
 
->>>>>>> Stashed changes
     /// <summary>Bubble switch: the play bar (toolbar) disappears while a macro plays. Stop it from the bubble.</summary>
     public static bool HidePlayBarWhilePlaying
     {

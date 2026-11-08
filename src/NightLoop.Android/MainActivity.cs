@@ -597,8 +597,6 @@ public sealed class MainActivity : Activity
             () => LocalSettings.WaitAfterTapsMs, v => LocalSettings.WaitAfterTapsMs = v);
         AddWait(playing, "Wait after every block (ms): a pause after each step. Taps that wait 0 skip it.",
             () => LocalSettings.WaitAfterBlocksMs, v => LocalSettings.WaitAfterBlocksMs = v);
-<<<<<<< Updated upstream
-=======
         var follow = new global::Android.Widget.Switch(this) { Text = "Follow the playing step: with the ☰ step list open, the step being played is highlighted and kept in the middle of the list.", Checked = LocalSettings.FollowPlayingStep };
         follow.SetTextColor(Palette.Text);
         follow.SetPadding(0, Palette.Dp(this, 8), 0, Palette.Dp(this, 8));
@@ -625,7 +623,6 @@ public sealed class MainActivity : Activity
         };
         playing.AddView(seasonal);
         playing.AddView(global);
->>>>>>> Stashed changes
         page.AddView(playing);
 
         page.AddView(Ui.Heading(this, "Account"));
