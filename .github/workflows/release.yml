@@ -71,7 +71,21 @@ jobs:
           PRE: ${{ github.event_name == 'workflow_dispatch' && inputs.prerelease || false }}
         run: |
           if [ -n "$KEYSTORE" ] && [ -n "$STORE_PASS" ] && [ -n "$ALIAS" ]; then
-            echo "$KEYSTORE" | base64 -d > "$RUNNER_TEMP/release.keystore"
+            # Pasted secrets can carry spaces or line breaks; drop them.
+            STORE_PASS="$(printf '%s' "$STORE_PASS" | tr -d '\r\n')"
+            ALIAS="$(printf '%s' "$ALIAS" | tr -d '[:space:]')"
+            printf '%s' "$KEYSTORE" | tr -d '[:space:]' | base64 -d > "$RUNNER_TEMP/release.keystore" \
+              || { echo "::error::ANDROID_KEYSTORE_BASE64 isn't valid key text. Copy it again with the [Convert]::ToBase64String command."; exit 1; }
+            export STORE_PASS
+            if ! keytool -list -keystore "$RUNNER_TEMP/release.keystore" -storepass:env STORE_PASS >/dev/null 2>&1; then
+              echo "::error::ANDROID_KEYSTORE_PASSWORD doesn't open the key in ANDROID_KEYSTORE_BASE64. They must come from the same keytool run."; exit 1
+            fi
+            if ! keytool -list -keystore "$RUNNER_TEMP/release.keystore" -storepass:env STORE_PASS -alias "$ALIAS" >/dev/null 2>&1; then
+              echo "::error::The key has no alias '$ALIAS'. ANDROID_KEY_ALIAS must be the -alias used in keytool (nightloop)."; exit 1
+            fi
+            if ! keytool -certreq -keystore "$RUNNER_TEMP/release.keystore" -storepass:env STORE_PASS -keypass:env STORE_PASS -alias "$ALIAS" >/dev/null 2>&1; then
+              echo "::error::The key's own password differs from the store password. Remake the key using one password for both."; exit 1
+            fi
             {
               echo "SIGN_ARGS=-p:AndroidKeyStore=true -p:AndroidSigningKeyStore=$RUNNER_TEMP/release.keystore -p:AndroidSigningKeyAlias=$ALIAS -p:AndroidSigningKeyPass=env:STORE_PASS -p:AndroidSigningStorePass=env:STORE_PASS"
               echo "STORE_PASS=$STORE_PASS"
