@@ -314,6 +314,7 @@ internal sealed class DotEditor
         {
             if (_isPlaying) PassThrough(view, layout, true);
             _windows.AddView(view, layout);
+            Core.Overlays.Track(view, layout, _windows); // a tap under this dot goes to the app, not the dot
         }
     }
 
@@ -565,7 +566,10 @@ internal sealed class DotEditor
     {
         CloseCard();
         foreach (var (view, _) in step.Windows())
+        {
+            Core.Overlays.Untrack(view);
             if (view.IsAttachedToWindow) _windows.RemoveView(view);
+        }
         _steps.Remove(step);
         if (_selected == step) _selected = null;
         Changed();
@@ -1212,7 +1216,10 @@ internal sealed class DotEditor
         CloseList();
         foreach (var step in _steps)
             foreach (var (view, _) in step.Windows())
+            {
+                Core.Overlays.Untrack(view);
                 if (view.IsAttachedToWindow) _windows.RemoveView(view);
+            }
         Core.Overlays.Untrack(_toolbar);
         if (_toolbar is not null) _windows.RemoveView(_toolbar);
         _toolbar = null;
