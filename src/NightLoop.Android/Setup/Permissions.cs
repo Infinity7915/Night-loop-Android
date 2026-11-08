@@ -8,7 +8,7 @@ using Android.Provider;
 namespace NightLoop.Mobile.Setup;
 
 /// <summary>One thing the user switches on in Android settings before Night-loop can play macros.</summary>
-public sealed record SetupStep(string Title, string Why, bool Done, Action<Activity> Open);
+public sealed record SetupStep(string Title, string Why, bool Done, Action<Activity> Open, string? HelpLink = null, string? HelpText = null);
 
 /// <summary>
 /// The permissions Night-loop needs and where in Android settings each one is turned on. The setup screen lists
@@ -44,7 +44,8 @@ public static class Permissions
                     new SetupStep("Allow restricted settings",
                         "Android blocks the accessibility switch for apps installed from a file. Tap Open, then the 3 dots at the top right of App info, then \"Allow restricted settings\", and confirm with your PIN or fingerprint.",
                         AccessibilityOn(context),
-                        OpenAppInfo),
+                        OpenAppInfo,
+                        TutorialUrl, "Watch how (video)"),
                 }
                 : []),
             new("Display over other apps",
@@ -79,4 +80,7 @@ public static class Permissions
     /// <summary>Night-loop's App info page (its ⋮ menu has "Allow restricted settings").</summary>
     public static void OpenAppInfo(Activity a) =>
         a.StartActivity(new Intent(Settings.ActionApplicationDetailsSettings, global::Android.Net.Uri.Parse("package:" + a.PackageName)));
+
+    /// <summary>The step-by-step video for "Allow restricted settings", kept in this repo.</summary>
+    public const string TutorialUrl = "https://github.com/Infinity7915/Night-loop-Android/blob/main/docs/tutorials/allow-restricted-settings.mp4";
 }

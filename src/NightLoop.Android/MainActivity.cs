@@ -620,6 +620,7 @@ public sealed class MainActivity : Activity
             row.AddView(Ui.Text(this, step.Done ? "On" : "Off", 14, step.Done ? Palette.Good : Palette.Warn, bold: true));
             row.AddView(Ui.Button(this, "Open", () => step.Open(this), primary: false));
             permissions.AddView(row);
+            if (step.HelpLink is not null) permissions.AddView(HelpLink(step));
         }
         page.AddView(permissions);
 
@@ -723,6 +724,7 @@ public sealed class MainActivity : Activity
             top.AddView(Ui.Text(this, "Off", 14, Palette.Warn, bold: true));
             card.AddView(top);
             card.AddView(Ui.Text(this, step.Why, 14, Palette.TextQuiet));
+            if (step.HelpLink is not null) card.AddView(HelpLink(step));
             card.AddView(Ui.Button(this, "Turn on", () => step.Open(this)));
             _steps.AddView(card);
         }
@@ -849,5 +851,15 @@ public sealed class MainActivity : Activity
         };
         card.AddView(box);
         card.AddView(Ui.Text(this, $"0 – {LocalSettings.WaitAfterMaxMs} ms. Default 0.", 12, Palette.TextQuiet));
+    }
+
+    /// <summary>Link-blue text under a step that opens its tutorial on GitHub.</summary>
+    private TextView HelpLink(SetupStep step)
+    {
+        var link = Ui.Text(this, step.HelpText ?? "Watch how", 13, Android.Graphics.Color.ParseColor("#4EA1FF"));
+        link.PaintFlags |= Android.Graphics.PaintFlags.UnderlineText;
+        link.Clickable = true;
+        link.Click += (_, _) => StartActivity(new Intent(Intent.ActionView, global::Android.Net.Uri.Parse(step.HelpLink)));
+        return link;
     }
 }
