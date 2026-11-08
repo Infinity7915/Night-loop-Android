@@ -119,7 +119,7 @@ public sealed class MainActivity : Activity
                 last = percent;
                 RunOnUiThread(() => note.Text = $"Downloading… {percent}%");
             }));
-            RunOnUiThread(() => note.Text = "Downloaded. Confirm the update in Android's window.");
+            RunOnUiThread(() => note.Text = "Downloaded. Tap Update in Android's window. Night-loop closes while it installs; open it again from the notice or your apps.");
         }
         catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException or TaskCanceledException or IOException or Java.Lang.Exception)
         {
