@@ -220,24 +220,17 @@ public sealed class EditorActivity : Activity
             .SetNegativeButton("Cancel", (_, _) => { })!.Show();
     }
 
-    private async Task RenameAsync(string name)
+    /// <summary>
+    /// Renames through the draft, like every other change. (Renaming on the side bumped the macro's version, and
+    /// the next autosave put the old name back.) Save makes the name stick on the saved copy too.
+    /// </summary>
+    private Task RenameAsync(string name)
     {
-        try
-        {
-            await FlushAsync();
-            var updated = await Night.Api.UpdateMacroAsync(_id, new UpdateMacroRequest(Name: name));
-            RunOnUiThread(() =>
-            {
-                _name = updated.Name;
-                _doc.Name = updated.Name;
-                _title.Text = updated.Name;
-            });
-            _ = Night.RefreshMacrosAsync();
-        }
-        catch (Exception ex) when (ex is ApiException or ServerUnreachableException)
-        {
-            RunOnUiThread(() => Ui.Toast(this, ex.Message));
-        }
+        _name = name;
+        _doc.Name = name;
+        _title.Text = name;
+        Changed();
+        return Task.CompletedTask;
     }
 
     // ---- Play ----
@@ -251,13 +244,19 @@ public sealed class EditorActivity : Activity
         }
         ApplyRepeat();
         var copy = MacroJson.Deserialize(MacroJson.Serialize(_doc));
-        if (Night.Play(_id, copy) is { } error)
+        _ = PlayAsync(copy);
+    }
+
+    private async Task PlayAsync(MacroDoc copy)
+    {
+        // Step aside first; the macro starts a moment later, once the game is in front.
+        MoveTaskToBack(true);
+        if (await Night.PlayAsync(_id, copy) is { } error)
         {
             Ui.Toast(this, error);
             return;
         }
         Ui.Toast(this, BubbleService.Running ? "Playing. Tap the bubble to stop." : "Playing. Come back here to stop it.");
-        MoveTaskToBack(true);
     }
 
     private void UpdatePlay() => _play.Text = Night.IsRunning(_id) ? "Stop" : "Play";

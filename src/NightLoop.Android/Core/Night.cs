@@ -56,7 +56,7 @@ internal static class Night
         });
         Session.OfflineGraceExpired += () => OnMain(StopAll);
 
-        Runs = new RunManager(NoInput.Instance)
+        Runs = new RunManager(AccessibilityKeys.Instance)
         {
             Touch = AccessibilityTouch.Instance,
             Notify = message => OnMain(() => Screens.Ui.Toast(_app, message)),
@@ -119,7 +119,7 @@ internal static class Night
             if (macro.Platform != MacroPlatforms.Android) return "PC macros play in Night-loop on your PC.";
             var doc = macro.SavedDoc ?? macro.DraftDoc;
             if (doc is null || doc.Blocks.Count == 0) return $"\"{macro.Name}\" has no blocks yet.";
-            return Play(id, doc);
+            return await PlayAsync(id, doc);
         }
         catch (Exception ex) when (ex is ApiException or ServerUnreachableException)
         {
@@ -127,21 +127,33 @@ internal static class Night
         }
     }
 
+    /// <summary>
+    /// A short pause before the first step: the bubble panel, Night-loop's screens and the game's own window are
+    /// still moving when Play is tapped, and a tap sent at that moment does nothing.
+    /// </summary>
+    public const int StartDelayMs = 700;
+
     /// <summary>Plays a document as it is (the editor's Play uses the copy on screen).</summary>
-    public static string? Play(Guid id, MacroDoc doc)
+    public static async Task<string?> PlayAsync(Guid id, MacroDoc doc)
     {
         if (!AccessibilityTouch.Ready) return "Turn on Night-loop in Accessibility settings first (see Set up).";
+        CompiledMacro compiled;
         try
         {
-            Stop(id);
-            var run = Runs.Start(MacroCompiler.Compile(doc));
-            RunsById[id] = run;
-            RunsChanged?.Invoke();
-            return null;
+            compiled = MacroCompiler.Compile(doc);
         }
         catch (MacroCompileException ex)
         {
             return ex.Issues.Count > 0 ? ex.Issues[0].Message : ex.Message;
+        }
+        Stop(id);
+        await Task.Delay(StartDelayMs);
+        try
+        {
+            var run = Runs.Start(compiled);
+            RunsById[id] = run;
+            RunsChanged?.Invoke();
+            return null;
         }
         catch (InvalidOperationException ex)
         {

@@ -465,17 +465,10 @@ public sealed class MainActivity : Activity
 
     private async Task PlayAsync(Guid id)
     {
+        // Out of the way first, so the macro taps the app underneath (it starts a moment later).
+        MoveTaskToBack(true);
         var error = await Night.PlayAsync(id);
-        RunOnUiThread(() =>
-        {
-            if (error is not null) Ui.Toast(this, error);
-            else
-            {
-                // Out of the way, so the macro can tap the app underneath.
-                Ui.Toast(this, "Playing. Use the bubble to stop it.");
-                if (BubbleService.Running) MoveTaskToBack(true);
-            }
-        });
+        RunOnUiThread(() => Ui.Toast(this, error ?? (BubbleService.Running ? "Playing. Use the bubble to stop it." : "Playing. Open Night-loop to stop it.")));
     }
 
     private void NewMacro()

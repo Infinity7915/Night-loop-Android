@@ -209,7 +209,7 @@ public sealed class BubbleService : Service
     private bool _opening;
 
     /// <summary>Selecting a macro puts its numbered dots on the screen (saving the one that was open).</summary>
-    private async Task EditAsync(Guid id)
+    private async Task EditAsync(Guid id, bool quiet = false)
     {
         if (_opening) return;
         ClosePanel();
@@ -223,7 +223,7 @@ public sealed class BubbleService : Service
             {
                 if (error is not null)
                 {
-                    Ui.Toast(this, error);
+                    if (!quiet) Ui.Toast(this, error);
                     return;
                 }
                 _editor = editor;
@@ -255,16 +255,18 @@ public sealed class BubbleService : Service
         }
     }
 
+    /// <summary>Plays with the macro's steps on screen (see-through, the playing one lit), or plainly when it has none.</summary>
     private async Task PlayAsync(Guid id)
     {
-        // The open macro's dots would catch its own taps: save and put them away first.
-        if (_editor is { } open) await open.CloseAsync();
-        var error = await Night.PlayAsync(id);
-        Night.OnMain(() =>
+        ClosePanel(); // out of the way of the taps
+        if (_editor?.MacroId != id) await EditAsync(id, quiet: true);
+        if (_editor?.MacroId == id)
         {
-            if (error is not null) Ui.Toast(this, error);
-            else ClosePanel(); // out of the way of the taps
-        });
+            await _editor.TogglePlayAsync();
+            return;
+        }
+        var error = await Night.PlayAsync(id);
+        if (error is not null) Night.OnMain(() => Ui.Toast(this, error));
     }
 
     private void ClosePanel()
