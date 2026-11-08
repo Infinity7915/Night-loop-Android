@@ -470,7 +470,7 @@ public sealed class MainActivity : Activity
 
         page.AddView(Ui.Heading(this, "Your macros"));
         var actions = Ui.Row(this);
-        actions.AddView(Ui.Button(this, "New macro", NewMacro));
+        actions.AddView(Ui.Button(this, "+ New macro", NewMacro));
         _bubbleButton = Ui.Button(this, "Show bubble", ToggleBubble, primary: false);
         actions.AddView(_bubbleButton);
         page.AddView(actions);
@@ -691,7 +691,7 @@ public sealed class MainActivity : Activity
         _macroList.RemoveAllViews();
         if (Night.Macros.Count == 0)
         {
-            _macroList.AddView(Ui.Text(this, "No macros yet. Tap New macro to make one.", 14, Palette.TextQuiet));
+            _macroList.AddView(Ui.Text(this, "No macros yet. Tap + New macro to make one.", 14, Palette.TextQuiet));
             return;
         }
         foreach (var macro in Night.Macros.OrderBy(m => m.Platform == MacroPlatforms.Android ? 0 : 1))
