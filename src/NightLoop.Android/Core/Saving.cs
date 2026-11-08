@@ -20,14 +20,18 @@ internal static class Saving
     /// <summary>Saves; after a conflict, keeps this phone's copy and tries once more.</summary>
     public static async Task<MacroDto> SaveAsync(DraftAutosaver saver, MacroDoc doc)
     {
-        try
+        for (var attempt = 0; ; attempt++)
         {
-            return await saver.SaveAsync(doc);
-        }
-        catch (Exception ex) when (ex is ApiException or InvalidOperationException && saver.State == SyncState.Conflict)
-        {
-            saver.KeepMine();
-            return await saver.SaveAsync(doc);
+            try
+            {
+                return await saver.SaveAsync(doc);
+            }
+            // Conflict, or Pending when the autosave's own "keep mine" got there first (it runs on the main thread).
+            catch (Exception ex) when (attempt < 2 && ex is ApiException or InvalidOperationException
+                                       && saver.State is SyncState.Conflict or SyncState.Pending)
+            {
+                saver.KeepMine(); // does nothing if it already ran
+            }
         }
     }
 }
