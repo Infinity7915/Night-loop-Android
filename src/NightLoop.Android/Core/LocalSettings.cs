@@ -41,6 +41,20 @@ internal static class LocalSettings
         set => _prefs?.Edit()!.PutBoolean("hide_dots_playing", value)!.Apply();
     }
 
+    /// <summary>Settings switch: seasonal icons around holidays (see <see cref="Seasons"/>). Off until turned on.</summary>
+    public static bool SeasonalThemes
+    {
+        get => _prefs?.GetBoolean("seasonal_themes", false) ?? false;
+        set => _prefs?.Edit()!.PutBoolean("seasonal_themes", value)!.Apply();
+    }
+
+    /// <summary>Settings switch: seasonal icons for every country's holidays (instead of <see cref="SeasonalThemes"/>; only one is on).</summary>
+    public static bool GlobalSeasonalThemes
+    {
+        get => _prefs?.GetBoolean("global_seasonal_themes", false) ?? false;
+        set => _prefs?.Edit()!.PutBoolean("global_seasonal_themes", value)!.Apply();
+    }
+
     /// <summary>Settings switch: while a macro plays with the ☰ step list open, the playing step is highlighted and kept centered.</summary>
     public static bool FollowPlayingStep
     {

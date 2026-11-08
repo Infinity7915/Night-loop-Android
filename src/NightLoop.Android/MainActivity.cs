@@ -18,7 +18,7 @@ namespace NightLoop.Mobile;
 /// Night-loop's main screen: sign in (with the emailed code), then the setup checklist, the bubble switch and the
 /// macro list. Android macros play and open in the editor; PC macros are listed as "PC only".
 /// </summary>
-[Activity(Name = "win.nightloop.app.MainActivity", Label = "Night-loop", MainLauncher = true, Exported = true,
+[Activity(Name = "win.nightloop.app.MainActivity", Label = "Night-loop", Exported = true,
           LaunchMode = LaunchMode.SingleTop, Icon = "@drawable/ic_nightloop",
           WindowSoftInputMode = SoftInput.AdjustResize,
           ConfigurationChanges = ConfigChanges.Orientation | ConfigChanges.ScreenSize)]
@@ -48,6 +48,7 @@ public sealed class MainActivity : Activity
     {
         base.OnCreate(savedInstanceState);
         Night.Init(this);
+        Seasons.ApplyLauncherIcon(this);
         Night.MacrosChanged += OnMacrosChanged;
         Night.RunsChanged += OnMacrosChanged;
         Night.SignedOut += OnSignedOut;
@@ -601,6 +602,27 @@ public sealed class MainActivity : Activity
         follow.SetPadding(0, Palette.Dp(this, 8), 0, Palette.Dp(this, 8));
         follow.CheckedChange += (_, e) => LocalSettings.FollowPlayingStep = e.IsChecked;
         playing.AddView(follow);
+        var seasonal = new global::Android.Widget.Switch(this) { Text = "Seasonal themes: around holidays (Christmas week, Halloween, Valentine's and more) Night-loop's icon and bubble dress up for the season. Holidays follow your phone's region setting (for example Lunar New Year and Mid-Autumn in China, the 4th of July in the US). Your location isn't used or saved.", Checked = LocalSettings.SeasonalThemes };
+        seasonal.SetTextColor(Palette.Text);
+        seasonal.SetPadding(0, Palette.Dp(this, 8), 0, Palette.Dp(this, 8));
+        var global = new global::Android.Widget.Switch(this) { Text = "Global themes: every country's holidays show when it's their time, not only your region's. When two overlap, the one whose main day is closer wins; within 3 days of each other it's a 50/50 pick for the day.", Checked = LocalSettings.GlobalSeasonalThemes };
+        global.SetTextColor(Palette.Text);
+        global.SetPadding(0, Palette.Dp(this, 8), 0, Palette.Dp(this, 8));
+        // Only one of the two can be on (or neither).
+        seasonal.CheckedChange += (_, e) =>
+        {
+            LocalSettings.SeasonalThemes = e.IsChecked;
+            if (e.IsChecked && global.Checked) global.Checked = false;
+            Seasons.ApplyLauncherIcon(this);
+        };
+        global.CheckedChange += (_, e) =>
+        {
+            LocalSettings.GlobalSeasonalThemes = e.IsChecked;
+            if (e.IsChecked && seasonal.Checked) seasonal.Checked = false;
+            Seasons.ApplyLauncherIcon(this);
+        };
+        playing.AddView(seasonal);
+        playing.AddView(global);
         page.AddView(playing);
 
         page.AddView(Ui.Heading(this, "Account"));

@@ -3,7 +3,170 @@
   <application android:label="Night-loop" android:icon="@drawable/ic_nightloop" android:allowBackup="false"
                android:fullBackupContent="false" android:dataExtractionRules="@xml/data_extraction_rules"
                android:usesCleartextTraffic="false"
-               android:theme="@android:style/Theme.Material.NoActionBar" />
+               android:theme="@android:style/Theme.Material.NoActionBar">
+    <!-- Home-screen icons: the normal one, and one per season (Settings › Seasonal themes switches them). -->
+    <activity-alias android:name="win.nightloop.app.Launcher" android:targetActivity="win.nightloop.app.MainActivity" android:exported="true"
+                    android:enabled="true" android:icon="@drawable/ic_nightloop" android:label="Night-loop">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN" />
+        <category android:name="android.intent.category.LAUNCHER" />
+      </intent-filter>
+    </activity-alias>
+    <activity-alias android:name="win.nightloop.app.Launcher_christmas" android:targetActivity="win.nightloop.app.MainActivity" android:exported="true"
+                    android:enabled="false" android:icon="@drawable/ic_nightloop_christmas" android:label="Night-loop">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN" />
+        <category android:name="android.intent.category.LAUNCHER" />
+      </intent-filter>
+    </activity-alias>
+    <activity-alias android:name="win.nightloop.app.Launcher_newyear" android:targetActivity="win.nightloop.app.MainActivity" android:exported="true"
+                    android:enabled="false" android:icon="@drawable/ic_nightloop_newyear" android:label="Night-loop">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN" />
+        <category android:name="android.intent.category.LAUNCHER" />
+      </intent-filter>
+    </activity-alias>
+    <activity-alias android:name="win.nightloop.app.Launcher_valentine" android:targetActivity="win.nightloop.app.MainActivity" android:exported="true"
+                    android:enabled="false" android:icon="@drawable/ic_nightloop_valentine" android:label="Night-loop">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN" />
+        <category android:name="android.intent.category.LAUNCHER" />
+      </intent-filter>
+    </activity-alias>
+    <activity-alias android:name="win.nightloop.app.Launcher_stpatrick" android:targetActivity="win.nightloop.app.MainActivity" android:exported="true"
+                    android:enabled="false" android:icon="@drawable/ic_nightloop_stpatrick" android:label="Night-loop">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN" />
+        <category android:name="android.intent.category.LAUNCHER" />
+      </intent-filter>
+    </activity-alias>
+    <activity-alias android:name="win.nightloop.app.Launcher_easter" android:targetActivity="win.nightloop.app.MainActivity" android:exported="true"
+                    android:enabled="false" android:icon="@drawable/ic_nightloop_easter" android:label="Night-loop">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN" />
+        <category android:name="android.intent.category.LAUNCHER" />
+      </intent-filter>
+    </activity-alias>
+    <activity-alias android:name="win.nightloop.app.Launcher_july4" android:targetActivity="win.nightloop.app.MainActivity" android:exported="true"
+                    android:enabled="false" android:icon="@drawable/ic_nightloop_july4" android:label="Night-loop">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN" />
+        <category android:name="android.intent.category.LAUNCHER" />
+      </intent-filter>
+    </activity-alias>
+    <activity-alias android:name="win.nightloop.app.Launcher_halloween" android:targetActivity="win.nightloop.app.MainActivity" android:exported="true"
+                    android:enabled="false" android:icon="@drawable/ic_nightloop_halloween" android:label="Night-loop">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN" />
+        <category android:name="android.intent.category.LAUNCHER" />
+      </intent-filter>
+    </activity-alias>
+    <activity-alias android:name="win.nightloop.app.Launcher_thanksgiving" android:targetActivity="win.nightloop.app.MainActivity" android:exported="true"
+                    android:enabled="false" android:icon="@drawable/ic_nightloop_thanksgiving" android:label="Night-loop">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN" />
+        <category android:name="android.intent.category.LAUNCHER" />
+      </intent-filter>
+    </activity-alias>
+    <activity-alias android:name="win.nightloop.app.Launcher_lunarnewyear" android:targetActivity="win.nightloop.app.MainActivity" android:exported="true"
+                    android:enabled="false" android:icon="@drawable/ic_nightloop_lunarnewyear" android:label="Night-loop">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN" />
+        <category android:name="android.intent.category.LAUNCHER" />
+      </intent-filter>
+    </activity-alias>
+    <activity-alias android:name="win.nightloop.app.Launcher_midautumn" android:targetActivity="win.nightloop.app.MainActivity" android:exported="true"
+                    android:enabled="false" android:icon="@drawable/ic_nightloop_midautumn" android:label="Night-loop">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN" />
+        <category android:name="android.intent.category.LAUNCHER" />
+      </intent-filter>
+    </activity-alias>
+    <activity-alias android:name="win.nightloop.app.Launcher_diwali" android:targetActivity="win.nightloop.app.MainActivity" android:exported="true"
+                    android:enabled="false" android:icon="@drawable/ic_nightloop_diwali" android:label="Night-loop">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN" />
+        <category android:name="android.intent.category.LAUNCHER" />
+      </intent-filter>
+    </activity-alias>
+    <activity-alias android:name="win.nightloop.app.Launcher_holi" android:targetActivity="win.nightloop.app.MainActivity" android:exported="true"
+                    android:enabled="false" android:icon="@drawable/ic_nightloop_holi" android:label="Night-loop">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN" />
+        <category android:name="android.intent.category.LAUNCHER" />
+      </intent-filter>
+    </activity-alias>
+    <activity-alias android:name="win.nightloop.app.Launcher_eid" android:targetActivity="win.nightloop.app.MainActivity" android:exported="true"
+                    android:enabled="false" android:icon="@drawable/ic_nightloop_eid" android:label="Night-loop">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN" />
+        <category android:name="android.intent.category.LAUNCHER" />
+      </intent-filter>
+    </activity-alias>
+    <activity-alias android:name="win.nightloop.app.Launcher_dayofthedead" android:targetActivity="win.nightloop.app.MainActivity" android:exported="true"
+                    android:enabled="false" android:icon="@drawable/ic_nightloop_dayofthedead" android:label="Night-loop">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN" />
+        <category android:name="android.intent.category.LAUNCHER" />
+      </intent-filter>
+    </activity-alias>
+    <activity-alias android:name="win.nightloop.app.Launcher_carnival" android:targetActivity="win.nightloop.app.MainActivity" android:exported="true"
+                    android:enabled="false" android:icon="@drawable/ic_nightloop_carnival" android:label="Night-loop">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN" />
+        <category android:name="android.intent.category.LAUNCHER" />
+      </intent-filter>
+    </activity-alias>
+    <activity-alias android:name="win.nightloop.app.Launcher_hanami" android:targetActivity="win.nightloop.app.MainActivity" android:exported="true"
+                    android:enabled="false" android:icon="@drawable/ic_nightloop_hanami" android:label="Night-loop">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN" />
+        <category android:name="android.intent.category.LAUNCHER" />
+      </intent-filter>
+    </activity-alias>
+    <activity-alias android:name="win.nightloop.app.Launcher_canadaday" android:targetActivity="win.nightloop.app.MainActivity" android:exported="true"
+                    android:enabled="false" android:icon="@drawable/ic_nightloop_canadaday" android:label="Night-loop">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN" />
+        <category android:name="android.intent.category.LAUNCHER" />
+      </intent-filter>
+    </activity-alias>
+    <activity-alias android:name="win.nightloop.app.Launcher_bastille" android:targetActivity="win.nightloop.app.MainActivity" android:exported="true"
+                    android:enabled="false" android:icon="@drawable/ic_nightloop_bastille" android:label="Night-loop">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN" />
+        <category android:name="android.intent.category.LAUNCHER" />
+      </intent-filter>
+    </activity-alias>
+    <activity-alias android:name="win.nightloop.app.Launcher_bonfire" android:targetActivity="win.nightloop.app.MainActivity" android:exported="true"
+                    android:enabled="false" android:icon="@drawable/ic_nightloop_bonfire" android:label="Night-loop">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN" />
+        <category android:name="android.intent.category.LAUNCHER" />
+      </intent-filter>
+    </activity-alias>
+    <activity-alias android:name="win.nightloop.app.Launcher_australiaday" android:targetActivity="win.nightloop.app.MainActivity" android:exported="true"
+                    android:enabled="false" android:icon="@drawable/ic_nightloop_australiaday" android:label="Night-loop">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN" />
+        <category android:name="android.intent.category.LAUNCHER" />
+      </intent-filter>
+    </activity-alias>
+    <activity-alias android:name="win.nightloop.app.Launcher_kingsday" android:targetActivity="win.nightloop.app.MainActivity" android:exported="true"
+                    android:enabled="false" android:icon="@drawable/ic_nightloop_kingsday" android:label="Night-loop">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN" />
+        <category android:name="android.intent.category.LAUNCHER" />
+      </intent-filter>
+    </activity-alias>
+    <activity-alias android:name="win.nightloop.app.Launcher_oktoberfest" android:targetActivity="win.nightloop.app.MainActivity" android:exported="true"
+                    android:enabled="false" android:icon="@drawable/ic_nightloop_oktoberfest" android:label="Night-loop">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN" />
+        <category android:name="android.intent.category.LAUNCHER" />
+      </intent-filter>
+    </activity-alias>
+  </application>
   <uses-permission android:name="android.permission.INTERNET" />
   <!-- The floating Night-loop bubble over other apps. -->
   <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
