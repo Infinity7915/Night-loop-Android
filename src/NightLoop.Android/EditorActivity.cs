@@ -139,7 +139,12 @@ public sealed class EditorActivity : Activity
                 _doc = MacroJson.Deserialize(MacroJson.Serialize(macro.Current ?? new MacroDoc { Name = macro.Name }));
                 _doc.Platform = MacroPlatforms.Android;
                 _autosaver = new DraftAutosaver(Night.Api, macro);
-                _autosaver.StateChanged += _ => RunOnUiThread(ShowSync);
+                var saver = _autosaver;
+                _autosaver.StateChanged += state =>
+                {
+                    Core.Saving.KeepMineOnConflict(saver, state);
+                    RunOnUiThread(ShowSync);
+                };
                 _title.Text = _name;
                 _repeat.Text = _doc.Options.Repeat.Mode == RepeatModes.Forever ? "" : (_doc.Options.Repeat.Count ?? 1).ToString();
                 ShowSync();
@@ -192,7 +197,7 @@ public sealed class EditorActivity : Activity
         }
         try
         {
-            await _autosaver.SaveAsync(_doc);
+            await Core.Saving.SaveAsync(_autosaver, _doc);
             RunOnUiThread(() =>
             {
                 ShowSync();

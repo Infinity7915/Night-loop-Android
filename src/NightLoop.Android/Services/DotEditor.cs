@@ -118,7 +118,11 @@ internal sealed class DotEditor
         _name = macro.Name;
         _doc = doc;
         _saver = new DraftAutosaver(Night.Api, macro);
-        _saver.StateChanged += _ => Night.OnMain(ShowStatus);
+        _saver.StateChanged += state =>
+        {
+            Core.Saving.KeepMineOnConflict(_saver, state);
+            Night.OnMain(ShowStatus);
+        };
     }
 
     private Context C => _service;
@@ -1172,7 +1176,7 @@ internal sealed class DotEditor
         var issues = MacroValidator.Validate(_doc);
         try
         {
-            if (issues.Count == 0) await _saver.SaveAsync(_doc);
+            if (issues.Count == 0) await Core.Saving.SaveAsync(_saver, _doc);
             else await _saver.FlushAsync();
         }
         catch (Exception ex) when (ex is ApiException or ServerUnreachableException or InvalidOperationException)
