@@ -252,6 +252,7 @@ internal sealed class DotEditor
         // Drag the toolbar by its title when it covers the spot you need.
         _title.SetOnTouchListener(new Drag(this, _toolbarLayout, null, end: false));
         _windows.AddView(bar, _toolbarLayout);
+        Core.Overlays.Track(bar, _toolbarLayout, _windows);
         _toolbar = bar;
     }
 
@@ -673,6 +674,7 @@ internal sealed class DotEditor
             Y = _listY ?? (_toolbarLayout?.Y ?? 0) + Math.Max(_toolbar?.Height ?? 0, Px(150)) + Px(8), // below the toolbar so ☰ stays reachable
         };
         _windows.AddView(panel, layout);
+        Core.Overlays.Track(panel, layout, _windows);
         _list = panel;
         // Drag the list by its title, like the toolbar; it reopens where you left it.
         heading.SetOnTouchListener(new Drag(this, layout, null, end: false, window: panel));
@@ -756,6 +758,7 @@ internal sealed class DotEditor
 
     private void CloseList()
     {
+        Core.Overlays.Untrack(_list);
         if (_list is not null) _windows.RemoveView(_list);
         _list = null;
     }
@@ -959,11 +962,13 @@ internal sealed class DotEditor
             SoftInputMode = SoftInput.AdjustPan | SoftInput.StateUnspecified,
         };
         _windows.AddView(scroll, layout);
+        Core.Overlays.Track(scroll, layout, _windows);
         _card = scroll;
     }
 
     private void CloseCard()
     {
+        Core.Overlays.Untrack(_card);
         if (_card is not null) _windows.RemoveView(_card);
         _card = null;
     }
@@ -1203,6 +1208,7 @@ internal sealed class DotEditor
         foreach (var step in _steps)
             foreach (var (view, _) in step.Windows())
                 if (view.IsAttachedToWindow) _windows.RemoveView(view);
+        Core.Overlays.Untrack(_toolbar);
         if (_toolbar is not null) _windows.RemoveView(_toolbar);
         _toolbar = null;
         _ = _saver.DisposeAsync().AsTask();
