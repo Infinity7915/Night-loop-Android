@@ -95,6 +95,11 @@ public sealed class BubbleService : Service
         if (OperatingSystem.IsAndroidVersionAtLeast(34))
             StartForeground(NotificationId, notification,
                 capture ? ForegroundService.TypeSpecialUse | ForegroundService.TypeMediaProjection : ForegroundService.TypeSpecialUse);
+        else if (OperatingSystem.IsAndroidVersionAtLeast(29))
+            // Name the type: without it Android starts the service as every type in the manifest, screen capture
+            // included, before you have allowed screen capture.
+            StartForeground(NotificationId, notification,
+                capture ? ForegroundService.TypeMediaProjection : (ForegroundService)0);
         else
             StartForeground(NotificationId, notification);
     }

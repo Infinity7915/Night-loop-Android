@@ -44,6 +44,7 @@ internal static class Night
         if (_started) return;
         _started = true;
         _app = context.ApplicationContext!;
+        CrashLog.Install(_app);
         AppInfo.Load(_app);
         LocalSettings.Load(_app);
         Waits.AfterClicksMs = LocalSettings.WaitAfterTapsMs;
