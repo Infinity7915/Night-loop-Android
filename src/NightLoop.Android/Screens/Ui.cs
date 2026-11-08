@@ -172,8 +172,31 @@ internal static class Ui
         var layout = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent);
         layout.SetMargins(0, Palette.Dp(c, 6), 0, 0);
         input.LayoutParameters = layout;
+        // One tap opens the keyboard (over a game the first tap only focused the box), and its key says Done
+        // instead of jumping on to the next box, so each value is edited on its own.
+        input.ImeOptions = global::Android.Views.InputMethods.ImeAction.Done | (global::Android.Views.InputMethods.ImeAction)0x02000000;
+        input.FocusChange += (_, e) => { if (e.HasFocus) ShowKeyboard(input); };
+        input.Click += (_, _) => ShowKeyboard(input);
+        input.EditorAction += (_, e) =>
+        {
+            if (e.ActionId != global::Android.Views.InputMethods.ImeAction.Done) { e.Handled = false; return; }
+            HideKeyboard(input);
+            input.ClearFocus();
+            e.Handled = true;
+        };
         return input;
     }
+
+    private static void ShowKeyboard(EditText input) => input.Post(() =>
+    {
+        input.RequestFocus();
+        (input.Context!.GetSystemService(Context.InputMethodService) as global::Android.Views.InputMethods.InputMethodManager)
+            ?.ShowSoftInput(input, global::Android.Views.InputMethods.ShowFlags.Implicit);
+    });
+
+    private static void HideKeyboard(EditText input) =>
+        (input.Context!.GetSystemService(Context.InputMethodService) as global::Android.Views.InputMethods.InputMethodManager)
+            ?.HideSoftInputFromWindow(input.WindowToken, 0);
 
     public static EditText Number(Context c, string hint, int? value) =>
         Input(c, hint, value?.ToString() ?? "", InputTypes.ClassNumber);
