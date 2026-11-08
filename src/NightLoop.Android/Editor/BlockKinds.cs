@@ -88,8 +88,9 @@ internal static class BlockKinds
         new(BlockTypes.HoldKey, "Hold key", "Keys", () => new() { ["key"] = "Space", ["holdMs"] = 1000 },
             [new TextField("key", "Key"), new IntField("holdMs", "Hold for (ms)", "1000", Required: true)],
             b => $"Hold {b.GetString("key", "")} for {b.GetInt("holdMs", 0)} ms"),
-        new(BlockTypes.Type, "Type text", "Keys", () => new() { ["text"] = "" },
-            [new TextField("text", "Text to type (goes to the selected text box, Android 13+)")],
+        new(BlockTypes.Type, "Type text", "Keys", () => new() { ["text"] = "", ["delayMs"] = 30 },
+            [new TextField("text", "Text to type (goes to the selected text box, Android 13+)"),
+             new IntField("delayMs", "Wait between letters (ms, 0 = all at once)", "30")],
             b => $"Type \"{b.GetString("text", "")}\""),
 
         new(BlockTypes.AppOpen, "Open app", "Apps", () => new() { ["package"] = "" },
