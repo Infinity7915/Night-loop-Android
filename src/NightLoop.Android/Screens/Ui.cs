@@ -36,7 +36,8 @@ internal static class Ui
 
     public static LinearLayout Row(Context c)
     {
-        var row = new LinearLayout(c) { Orientation = Orientation.Horizontal };
+        // Not baseline-aligned: lining up text baselines pushed buttons down and cut off their bottoms.
+        var row = new LinearLayout(c) { Orientation = Orientation.Horizontal, BaselineAligned = false };
         row.SetGravity(GravityFlags.CenterVertical);
         return row;
     }
@@ -84,11 +85,15 @@ internal static class Ui
         button.SetAllCaps(false);
         button.SetTextColor(primary ? Palette.Background : Palette.Text);
         button.Background = primary ? Rounded(c, Palette.Accent, 10) : Rounded(c, Palette.SurfaceHigh, 10, Palette.Border);
-        button.SetMinHeight(Palette.Dp(c, 40));
-        button.SetMinimumHeight(Palette.Dp(c, 40));
-        button.SetPadding(Palette.Dp(c, 14), 0, Palette.Dp(c, 14), 0);
+        button.SetMinHeight(0);
+        button.SetMinimumHeight(0);
+        button.SetMinWidth(0);
+        button.SetMinimumWidth(0);
+        button.StateListAnimator = null; // no shadow that spills outside the card
+        button.Gravity = GravityFlags.Center;
+        button.SetPadding(Palette.Dp(c, 16), 0, Palette.Dp(c, 16), 0);
         button.Click += (_, _) => onClick();
-        var layout = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.WrapContent);
+        var layout = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, Palette.Dp(c, 44));
         layout.SetMargins(0, Palette.Dp(c, 10), Palette.Dp(c, 8), 0);
         button.LayoutParameters = layout;
         return button;
@@ -102,10 +107,12 @@ internal static class Ui
         button.SetTextColor(Palette.Text);
         button.Background = Rounded(c, Palette.SurfaceHigh, 8, Palette.Border);
         var size = Palette.Dp(c, 40);
-        button.SetMinWidth(size);
-        button.SetMinimumWidth(size);
-        button.SetMinHeight(size);
-        button.SetMinimumHeight(size);
+        button.SetMinWidth(0);
+        button.SetMinimumWidth(0);
+        button.SetMinHeight(0);
+        button.SetMinimumHeight(0);
+        button.StateListAnimator = null;
+        button.Gravity = GravityFlags.Center;
         button.SetPadding(0, 0, 0, 0);
         button.Click += (_, _) => onClick();
         var layout = new LinearLayout.LayoutParams(size, size);
@@ -137,12 +144,54 @@ internal static class Ui
         return view;
     }
 
+    /// <summary>Widest a page gets: on tablets and phones held sideways the column stays readable, centered.</summary>
+    public const int PageMaxWidthDp = 720;
+
     public static ScrollView Scroll(Context c, View content)
     {
         var scroll = new ScrollView(c) { FillViewport = true };
         scroll.SetBackgroundColor(Palette.Background);
-        scroll.AddView(content);
+        var frame = new FrameLayout(c);
+        content.LayoutParameters = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent,
+            GravityFlags.CenterHorizontal);
+        frame.AddView(content);
+        // Cap the width once the frame knows how wide the screen is (and again after turning the phone).
+        frame.LayoutChange += (_, e) =>
+        {
+            var max = Palette.Dp(c, PageMaxWidthDp);
+            var width = e.Right - e.Left;
+            var want = width > max ? max : ViewGroup.LayoutParams.MatchParent;
+            var lp = (FrameLayout.LayoutParams)content.LayoutParameters!;
+            if (lp.Width == want) return;
+            lp.Width = want;
+            content.Post(content.RequestLayout);
+        };
+        scroll.AddView(frame, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent));
+        scroll.SetOnApplyWindowInsetsListener(new KeepClearOfBars());
         return scroll;
+    }
+
+    /// <summary>
+    /// Android 15 draws apps behind the status bar, navigation bar and keyboard. Pad the page so nothing hides
+    /// under them (the title sat under the clock before).
+    /// </summary>
+    private sealed class KeepClearOfBars : Java.Lang.Object, View.IOnApplyWindowInsetsListener
+    {
+        public WindowInsets OnApplyWindowInsets(View v, WindowInsets insets)
+        {
+            if (OperatingSystem.IsAndroidVersionAtLeast(30))
+            {
+                var bars = insets.GetInsets(WindowInsets.Type.SystemBars() | WindowInsets.Type.Ime() | WindowInsets.Type.DisplayCutout());
+                v.SetPadding(bars.Left, bars.Top, bars.Right, bars.Bottom);
+            }
+            else
+            {
+#pragma warning disable CS0618, CA1422 // the only way before Android 11
+                v.SetPadding(insets.SystemWindowInsetLeft, insets.SystemWindowInsetTop, insets.SystemWindowInsetRight, insets.SystemWindowInsetBottom);
+#pragma warning restore CS0618, CA1422
+            }
+            return insets;
+        }
     }
 
     public static void Toast(Context c, string text) =>

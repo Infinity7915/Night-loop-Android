@@ -53,6 +53,7 @@ public sealed class BubbleService : Service
     {
         Night.RunsChanged -= OnRunsChanged;
         Night.MacrosChanged -= FillPanel;
+        _editor?.Dismiss();
         ClosePanel();
         if (_bubble is not null) _windows?.RemoveView(_bubble);
         _bubble = null;
@@ -171,30 +172,93 @@ public sealed class BubbleService : Service
         _panelList.RemoveAllViews();
         if (!Night.Session.IsSignedIn)
         {
-            _panelList.AddView(Ui.Text(this, "Sign in to Night-loop to play your macros.", 14, Palette.TextQuiet));
+            _panelList.AddView(Ui.Text(this, "Sign in to Night-loop to make and play macros.", 14, Palette.TextQuiet));
             _panelList.AddView(Ui.Button(this, "Open Night-loop", OpenApp));
             return;
         }
+        _panelList.AddView(Ui.Text(this, "Tap a macro to show its dots. PC macros only play on PC.", 12, Palette.TextQuiet));
         var macros = Night.AndroidMacros.ToList();
         if (macros.Count == 0)
-            _panelList.AddView(Ui.Text(this, "No Android macros yet. Make one in Night-loop.", 14, Palette.TextQuiet));
+            _panelList.AddView(Ui.Text(this, "No Android macros yet. Tap + New macro.", 14, Palette.TextQuiet));
         foreach (var macro in macros)
         {
             var row = Ui.Row(this);
             row.SetPadding(0, Palette.Dp(this, 6), 0, 0);
             var running = Night.IsRunning(macro.Id);
-            row.AddView(Ui.Fill(Ui.Text(this, macro.Name, 15, running ? Palette.Good : Palette.Text, bold: running)));
+            var editing = _editor?.MacroId == macro.Id;
+            var name = Ui.Text(this, editing ? $"✥ {macro.Name}" : macro.Name, 15, running ? Palette.Good : editing ? Palette.Accent : Palette.Text,
+                bold: running || editing);
+            name.SetPadding(0, Palette.Dp(this, 8), 0, Palette.Dp(this, 8));
             var id = macro.Id;
+            name.Click += (_, _) => _ = EditAsync(id);
+            row.AddView(Ui.Fill(name));
             row.AddView(running
                 ? Ui.Small(this, "■", () => Night.Stop(id), $"Stop {macro.Name}")
                 : Ui.Small(this, "▶", () => _ = PlayAsync(id), $"Play {macro.Name}"));
             _panelList.AddView(row);
         }
-        if (Night.AnyRunning) _panelList.AddView(Ui.Button(this, "Stop all", Night.StopAll, primary: false));
+        var actions = Ui.Row(this);
+        actions.AddView(Ui.Button(this, "+ New macro", () => _ = NewMacroAsync()));
+        if (Night.AnyRunning) actions.AddView(Ui.Button(this, "Stop all", Night.StopAll, primary: false));
+        _panelList.AddView(actions);
+    }
+
+    // ---- Dot editor ----
+
+    private DotEditor? _editor;
+    private bool _opening;
+
+    /// <summary>Selecting a macro puts its numbered dots on the screen (saving the one that was open).</summary>
+    private async Task EditAsync(Guid id)
+    {
+        if (_opening) return;
+        ClosePanel();
+        if (_editor?.MacroId == id) return;
+        _opening = true;
+        try
+        {
+            if (_editor is { } open) await open.CloseAsync();
+            var (editor, error) = await DotEditor.OpenAsync(this, _windows!, id);
+            Night.OnMain(() =>
+            {
+                if (error is not null)
+                {
+                    Ui.Toast(this, error);
+                    return;
+                }
+                _editor = editor;
+                editor!.Closed += () =>
+                {
+                    if (_editor == editor) _editor = null;
+                };
+            });
+        }
+        finally
+        {
+            _opening = false;
+        }
+    }
+
+    private async Task NewMacroAsync()
+    {
+        var taken = new HashSet<string>(Night.Macros.Select(m => m.Name), StringComparer.OrdinalIgnoreCase);
+        var name = Enumerable.Range(1, 1000).Select(n => $"Phone macro {n}").First(n => !taken.Contains(n));
+        try
+        {
+            var id = await Night.CreateMacroAsync(name);
+            await EditAsync(id);
+            Night.OnMain(() => Ui.Toast(this, "Tap + to add a dot, then drag it where to tap. ⚙ renames it."));
+        }
+        catch (Exception ex) when (ex is Client.ApiException or Client.ServerUnreachableException)
+        {
+            Night.OnMain(() => Ui.Toast(this, ex.Message));
+        }
     }
 
     private async Task PlayAsync(Guid id)
     {
+        // The open macro's dots would catch its own taps: save and put them away first.
+        if (_editor is { } open) await open.CloseAsync();
         var error = await Night.PlayAsync(id);
         Night.OnMain(() =>
         {

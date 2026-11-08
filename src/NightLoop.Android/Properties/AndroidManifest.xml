@@ -9,6 +9,8 @@
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
   <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+  <!-- Auto-update: hand a downloaded Night-loop update to Android's installer (you confirm it). -->
+  <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
   <!-- Open app / Wait for app: see which apps have a home-screen icon (Android 11+ hides them otherwise). -->
   <queries>
     <intent>

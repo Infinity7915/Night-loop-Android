@@ -103,6 +103,9 @@ internal static class Night
 
     // ---- Playing ----
 
+    /// <summary>The run started for a macro, while it plays.</summary>
+    public static MacroRun? RunOf(Guid id) => RunsById.TryGetValue(id, out var run) && run.IsActive ? run : null;
+
     public static bool IsRunning(Guid id) => RunsById.TryGetValue(id, out var run) && run.IsActive;
     public static bool AnyRunning => RunsById.Values.Any(r => r.IsActive);
 

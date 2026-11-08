@@ -37,6 +37,10 @@ public sealed class MainActivity : Activity
     private Button? _bubbleButton;
     private TextView? _bubbleNote;
     private LinearLayout? _macroList;
+    private LinearLayout? _updateBox;
+    private static Updater.Update? _update;
+    private static bool _updateChecked;
+    private bool _installing;
 
     protected override void OnCreate(Bundle? savedInstanceState)
     {
@@ -47,6 +51,73 @@ public sealed class MainActivity : Activity
         Night.SignedOut += OnSignedOut;
         Show(Screen.Loading);
         _ = RestoreAsync();
+        if (!_updateChecked) _ = CheckForUpdateAsync(quiet: true);
+    }
+
+    // ---- Updates ----
+
+    private async Task CheckForUpdateAsync(bool quiet)
+    {
+        try
+        {
+            var update = await Updater.CheckAsync();
+            _updateChecked = true;
+            RunOnUiThread(() =>
+            {
+                _update = update;
+                FillUpdate();
+                if (!quiet) Ui.Toast(this, update is null ? $"You have the newest version ({AppInfo.Version})." : $"Night-loop {update.Version} is available.");
+            });
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or System.Text.Json.JsonException)
+        {
+            if (!quiet) RunOnUiThread(() => Ui.Toast(this, "Couldn't check for updates. Check your internet connection."));
+        }
+    }
+
+    private void FillUpdate()
+    {
+        if (_updateBox is null) return;
+        _updateBox.RemoveAllViews();
+        if (_update is not { } update) return;
+        var card = Ui.Card(this);
+        card.AddView(Ui.Text(this, $"Update available: {update.Version}", 16, Palette.Text, bold: true));
+        var note = Ui.Text(this, $"You have {AppInfo.Version}. The update downloads ({update.Size / 1_048_576.0:0.#} MB) and Android asks you to confirm.", 14, Palette.TextQuiet);
+        card.AddView(note);
+        var button = Ui.Button(this, "Update now", () => { });
+        button.Click += (_, _) => _ = InstallUpdateAsync(update, button, note);
+        card.AddView(button);
+        _updateBox.AddView(card);
+    }
+
+    private async Task InstallUpdateAsync(Updater.Update update, Button button, TextView note)
+    {
+        if (_installing) return;
+        if (!Updater.CanInstall(this))
+        {
+            Ui.Toast(this, "Allow Night-loop to install updates, then tap Update now again.");
+            Updater.OpenInstallPermission(this);
+            return;
+        }
+        _installing = true;
+        button.Enabled = false;
+        try
+        {
+            await Updater.InstallAsync(this, update, percent => RunOnUiThread(() => note.Text = $"Downloading… {percent}%"));
+            RunOnUiThread(() => note.Text = "Downloaded. Confirm the update in Android's window.");
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or IOException or Java.Lang.Exception)
+        {
+            RunOnUiThread(() =>
+            {
+                note.Text = $"The download failed ({ex.Message}). Try again.";
+                button.Enabled = true;
+            });
+        }
+        finally
+        {
+            _installing = false;
+        }
     }
 
     protected override void OnDestroy()
@@ -201,6 +272,9 @@ public sealed class MainActivity : Activity
         _macroList = null;
         var page = Ui.Column(this, Palette.Dp(this, 16));
         page.AddView(Ui.Text(this, "Night-loop", 26, Palette.Text, bold: true));
+        _updateBox = Ui.Column(this, 0);
+        page.AddView(_updateBox);
+        FillUpdate();
         switch (screen)
         {
             case Screen.Loading:
@@ -305,6 +379,12 @@ public sealed class MainActivity : Activity
         _macroList.SetPadding(0, Palette.Dp(this, 10), 0, 0);
         page.AddView(_macroList);
         FillMacros();
+
+        page.AddView(Ui.Heading(this, "About"));
+        var about = Ui.Card(this);
+        about.AddView(Ui.Text(this, $"Night-loop for Android {AppInfo.Version}", 14, Palette.Text));
+        about.AddView(Ui.Button(this, "Check for updates", () => _ = CheckForUpdateAsync(quiet: false), primary: false));
+        page.AddView(about);
     }
 
     private void RefreshSetup()
@@ -330,7 +410,7 @@ public sealed class MainActivity : Activity
         _bubbleButton.Enabled = canDraw;
         _bubbleButton.Text = BubbleService.Running ? "Hide bubble" : "Show bubble";
         _bubbleNote.Text = canDraw
-            ? "The bubble floats over your games. Tap it to play or stop a macro; drag it anywhere."
+            ? "Make and play macros from the bubble over your game: tap it, pick a macro to show its numbered dots, or + New macro. Drag the bubble anywhere."
             : "Turn on \"Display over other apps\" above to use the bubble.";
     }
 
