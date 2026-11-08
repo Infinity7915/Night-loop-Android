@@ -50,6 +50,7 @@ internal static class BlockKinds
         new ChoiceField("onFail", "If it gives up", OnFails), new TextField("failLabel", "Label to go to (for Go to a label)"),
     ];
 
+    private static readonly (string, string)[] Targets = [("image", "A picture"), ("text", "Text")];
     private static readonly (string, string)[] WhenFound = [("none", "Just go on"), ("tap", "Tap it, then go on")];
     private static Field[] Tapping(Field[] fields) => [.. fields, new ChoiceField("whenFound", "When found", WhenFound)];
 
@@ -199,7 +200,6 @@ internal static class BlockKinds
     public static string AppName(string? package) =>
         string.IsNullOrEmpty(package) ? "(pick an app)" : AppNames.TryGetValue(package, out var name) ? name : package;
 
-    private static readonly (string, string)[] Targets = [("image", "A picture"), ("text", "Text")];
     private static string Tap(Block b) => b.GetString("whenFound", "none") is "tap" or "click" ? " · tap it" : "";
     private static string Looking(Block b) => b.GetString("target", "image") == "text"
         ? $"\"{b.GetString("value", "")}\""
