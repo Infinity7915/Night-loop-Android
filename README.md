@@ -3,8 +3,9 @@
 The Android version of [Night-loop](https://github.com/Infinity7915/Night-loop): build macros from blocks and run
 them from a floating Night-loop bubble that stays on top of other apps and the home screen.
 
-**Status: phase 2 preview (0.2.0).** Sign in, make Android macros from touch, app, timing and logic blocks in the
-editor, and play or stop them from the floating bubble. Screen reading (find pictures and text) is phase 3.
+**Status: preview (0.3.0).** Sign in, make macros on top of your game with numbered dots from the floating bubble (or
+from blocks in the app's editor), play and stop them from the bubble, and update in the app. Screen reading (find
+pictures and text) comes later. Releases need the signing key once: see [docs/signing-key.md](docs/signing-key.md).
 
 ## How it works
 
@@ -28,7 +29,8 @@ src/NightLoop.Android      the Android app (.NET 10 for Android, C#)
   MainActivity.cs            sign in, set up, macro list
   EditorActivity.cs          the block editor (Editor/: block list, edit window, app picker)
   Core/                      account (Keystore-encrypted session), macro list, playing (touch through accessibility)
-  Services/                  bubble + panel, accessibility service, Pick on screen
+  Services/                  bubble + panel, dot editor (DotEditor.cs), accessibility service, Pick on screen
+  Core/Updater.cs            auto-update from GitHub releases through Android's package installer
 ```
 
 Clone with `git clone --recursive`, or run `git submodule update --init` after cloning.
