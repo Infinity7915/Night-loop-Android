@@ -1144,6 +1144,8 @@ internal sealed class DotEditor
             SetPlaying(false);
             return;
         }
+        var latest = -1;
+        var queued = 0;
         run.StepChanged += OnStep;
         try { await run.Completion; }
         catch (Exception) { /* Night shows faults */ }
@@ -1155,8 +1157,6 @@ internal sealed class DotEditor
 
         // Only the newest step is shown: if the screen falls behind, older updates are dropped instead of
         // queueing up and flashing through many dots at once.
-        var latest = -1;
-        var queued = 0;
         void OnStep(MacroRun r, int index)
         {
             Volatile.Write(ref latest, index);
