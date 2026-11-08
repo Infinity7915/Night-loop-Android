@@ -1,4 +1,5 @@
 using Android.Content;
+using Android.OS;
 using Android.Runtime;
 
 namespace NightLoop.Mobile.Core;
@@ -26,8 +27,8 @@ internal static class CrashLog
         {
             File.WriteAllText(_path,
                 $"Night-loop for Android {AppInfo.Version}\n" +
-                $"Android {global::Android.OS.Build.VERSION.Release} (API {(int)global::Android.OS.Build.VERSION.SdkInt}), " +
-                $"{global::Android.OS.Build.Manufacturer} {global::Android.OS.Build.Model}\n" +
+                $"Android {Build.VERSION.Release} (API {(int)Build.VERSION.SdkInt}), " +
+                $"{Build.Manufacturer} {Build.Model}\n" +
                 $"{DateTime.UtcNow:yyyy-MM-dd HH:mm} UTC\n\n{ex}");
         }
         catch (IOException) { }
