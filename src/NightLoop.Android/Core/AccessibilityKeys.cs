@@ -22,12 +22,18 @@ internal sealed class AccessibilityKeys : IInputSender
             ?? throw new MacroFaultException("No text box is selected, so there's nowhere to type. Tap a text box first (a Tap step works).");
     }
 
+    private static Android.AccessibilityServices.InputMethod.AccessibilityInputConnection? UpConnection() =>
+        OperatingSystem.IsAndroidVersionAtLeast(33) ? NightLoopAccessibilityService.Current?.InputMethod?.CurrentInputConnection : null;
+
     public void KeyDown(int virtualKey) => Send(KeyEventActions.Down, virtualKey);
     public void KeyUp(int virtualKey) => Send(KeyEventActions.Up, virtualKey);
 
     private static void Send(KeyEventActions action, int virtualKey)
     {
         var code = ToAndroid(virtualKey) ?? throw new MacroFaultException("This key can't be pressed on Android.");
+        // Enter (or Tab, Esc...) often closes the text box as soon as it goes down, so there's nothing left to
+        // send the release to. That's not an error: the key was pressed. Only a missing text box on the way down is.
+        if (action == KeyEventActions.Up && UpConnection() is null) return;
         var connection = Connection();
         var time = Android.OS.SystemClock.UptimeMillis();
         if (OperatingSystem.IsAndroidVersionAtLeast(33))
