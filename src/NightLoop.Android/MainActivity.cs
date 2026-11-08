@@ -333,6 +333,7 @@ public sealed class MainActivity : Activity
         page.AddView(Ui.Text(this, "Night-loop", 26, Palette.Text, bold: true));
         _updateBox = Ui.Column(this, 0);
         page.AddView(_updateBox);
+        if (CrashLog.Last is { } crash) page.AddView(CrashCard(crash));
         FillUpdate();
         switch (screen)
         {
@@ -863,5 +864,23 @@ public sealed class MainActivity : Activity
         link.Clickable = true;
         link.Click += (_, _) => StartActivity(new Intent(Intent.ActionView, global::Android.Net.Uri.Parse(step.HelpLink)));
         return link;
+    }
+
+    /// <summary>Shown after Night-loop closed unexpectedly: copy the report for a bug report, or dismiss it.</summary>
+    private View CrashCard(string crash)
+    {
+        var card = Ui.Card(this);
+        card.AddView(Ui.Text(this, "Night-loop closed unexpectedly last time", 16, Palette.Warn, bold: true));
+        card.AddView(Ui.Text(this, "Copy the report and send it to us (Discord or GitHub) so we can fix it. It only has the error, your Night-loop version and your phone model.", 13, Palette.TextQuiet));
+        var row = Ui.Row(this);
+        row.AddView(Ui.Button(this, "Copy report", () =>
+        {
+            var clip = (global::Android.Content.ClipboardManager)GetSystemService(ClipboardService)!;
+            clip.PrimaryClip = ClipData.NewPlainText("Night-loop crash", crash);
+            Ui.Toast(this, "Copied.");
+        }));
+        row.AddView(Ui.Button(this, "Dismiss", () => { CrashLog.Clear(); Show(_screen); }, primary: false));
+        card.AddView(row);
+        return card;
     }
 }
