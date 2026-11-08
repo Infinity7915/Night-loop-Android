@@ -39,6 +39,7 @@ public sealed class MainActivity : Activity
     private TextView? _bubbleNote;
     private LinearLayout? _macroList;
     private LinearLayout? _updateBox;
+    private TextView? _updateStatus;
     private static Updater.Update? _update;
     private static bool _updateChecked;
     private bool _installing;
@@ -67,12 +68,18 @@ public sealed class MainActivity : Activity
             {
                 _update = update;
                 FillUpdate();
-                if (!quiet) Ui.Toast(this, update is null ? $"You have the newest version ({AppInfo.Version})." : $"Night-loop {update.Version} is available.");
+                if (!quiet && _updateStatus is not null)
+                    _updateStatus.Text = update is null
+                        ? $"You're on the latest release ({AppInfo.Version})."
+                        : $"Night-loop {update.Version} is available. Tap Update now on Home.";
             });
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or System.Text.Json.JsonException)
         {
-            if (!quiet) RunOnUiThread(() => Ui.Toast(this, "Couldn't check for updates. Check your internet connection."));
+            if (!quiet) RunOnUiThread(() =>
+            {
+                if (_updateStatus is not null) _updateStatus.Text = "Couldn't check for updates. Check your internet connection.";
+            });
         }
     }
 
@@ -576,7 +583,13 @@ public sealed class MainActivity : Activity
         page.AddView(Ui.Heading(this, "About"));
         var about = Ui.Card(this);
         about.AddView(Ui.Text(this, $"Night-loop for Android {AppInfo.Version}", 14, Palette.Text));
-        about.AddView(Ui.Button(this, "Check for updates", () => _ = CheckForUpdateAsync(quiet: false), primary: false));
+        about.AddView(Ui.Button(this, "Check for updates", () =>
+        {
+            if (_updateStatus is not null) _updateStatus.Text = "Checking…";
+            _ = CheckForUpdateAsync(quiet: false);
+        }, primary: false));
+        _updateStatus = Ui.Text(this, "", 13, Palette.TextQuiet);
+        about.AddView(_updateStatus);
         page.AddView(about);
     }
 
