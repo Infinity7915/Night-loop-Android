@@ -101,6 +101,7 @@ internal sealed class DotEditor
     private Button? _playButton;
     private View? _card;
     private View? _list;
+    private int? _listX, _listY;
     private bool _isPlaying;
     private bool _closed;
 
@@ -646,7 +647,8 @@ internal sealed class DotEditor
         var panel = Ui.Column(C, Px(12));
         panel.Background = Ui.Rounded(C, Palette.Surface, 14, Palette.Accent);
         var top = Ui.Row(C);
-        top.AddView(Ui.Fill(Ui.Text(C, "Steps in order", 16, Palette.Text, bold: true)));
+        var heading = Ui.Text(C, "⠿ Steps in order", 16, Palette.Text, bold: true);
+        top.AddView(Ui.Fill(heading));
         top.AddView(Ui.Small(C, "⊕", ShowAddMenu, "Add a step"));
         top.AddView(Ui.Small(C, "✕", CloseList, "Close the list"));
         panel.AddView(top);
@@ -661,10 +663,13 @@ internal sealed class DotEditor
             WindowManagerFlags.NotFocusable | WindowManagerFlags.LayoutNoLimits, Format.Translucent)
         {
             Gravity = GravityFlags.Top | GravityFlags.CenterHorizontal,
-            Y = (_toolbarLayout?.Y ?? 0) + Px(150),
+            X = _listX ?? 0,
+            Y = _listY ?? (_toolbarLayout?.Y ?? 0) + Math.Max(_toolbar?.Height ?? 0, Px(150)) + Px(8), // below the toolbar so ☰ stays reachable
         };
         _windows.AddView(panel, layout);
         _list = panel;
+        // Drag the list by its title, like the toolbar; it reopens where you left it.
+        heading.SetOnTouchListener(new Drag(this, layout, null, end: false, window: panel));
         FillList();
     }
 
@@ -1180,7 +1185,7 @@ internal sealed class DotEditor
     }
 
     /// <summary>Drags a step (or the toolbar). A touch that hardly moves is a tap: it opens the step's settings.</summary>
-    private sealed class Drag(DotEditor editor, WindowManagerLayoutParams layout, Step? step, bool end) : Java.Lang.Object, View.IOnTouchListener
+    private sealed class Drag(DotEditor editor, WindowManagerLayoutParams layout, Step? step, bool end, View? window = null) : Java.Lang.Object, View.IOnTouchListener
     {
         private float _downX, _downY;
         private int _startX, _startY;
@@ -1189,7 +1194,7 @@ internal sealed class DotEditor
         public bool OnTouch(View? v, MotionEvent? e)
         {
             if (v is null || e is null) return false;
-            View? target = step is null ? editor._toolbar : end ? step.EndView : step.View;
+            View? target = window ?? (step is null ? editor._toolbar : end ? step.EndView : step.View);
             switch (e.Action)
             {
                 case MotionEventActions.Down:
@@ -1206,6 +1211,7 @@ internal sealed class DotEditor
                     }
                     return true;
                 case MotionEventActions.Up:
+                    if (window is not null) (editor._listX, editor._listY) = (layout.X, layout.Y);
                     if (step is null) return true;
                     if (_moved)
                     {
