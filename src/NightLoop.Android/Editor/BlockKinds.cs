@@ -44,6 +44,23 @@ internal static class BlockKinds
             [new ChoiceField("button", "Button", Buttons)],
             b => $"Press {Text(Buttons, b.GetString("button", "back"))}"),
 
+        new(BlockTypes.Key, "Key", "Keys", () => new() { ["key"] = "Enter", ["action"] = "press" },
+            [new TextField("key", "Key (A, 5, Enter, Space, Backspace, Tab, Up, Shift, F1…)"),
+             new ChoiceField("action", "Do", [("press", "Press it"), ("down", "Hold it down"), ("up", "Release it")]),
+             new IntField("holdMs", "Press length (ms)", "30")],
+            b => b.GetString("action", "press") switch
+            {
+                "down" => $"Hold {b.GetString("key", "")} down",
+                "up" => $"Release {b.GetString("key", "")}",
+                _ => $"Press {b.GetString("key", "")}",
+            }),
+        new(BlockTypes.HoldKey, "Hold key", "Keys", () => new() { ["key"] = "Space", ["holdMs"] = 1000 },
+            [new TextField("key", "Key"), new IntField("holdMs", "Hold for (ms)", "1000", Required: true)],
+            b => $"Hold {b.GetString("key", "")} for {b.GetInt("holdMs", 0)} ms"),
+        new(BlockTypes.Type, "Type text", "Keys", () => new() { ["text"] = "" },
+            [new TextField("text", "Text to type (goes to the selected text box, Android 13+)")],
+            b => $"Type \"{b.GetString("text", "")}\""),
+
         new(BlockTypes.AppOpen, "Open app", "Apps", () => new() { ["package"] = "" },
             [new AppField("package", "App"), new BoolField("wait", "Wait until it's in front", true), new IntField("timeoutMs", "Give up after (ms, 0 = Infinite)", "30000")],
             b => $"Open {AppName(b.GetString("package"))}"),

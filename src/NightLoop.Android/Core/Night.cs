@@ -43,6 +43,7 @@ internal static class Night
         _started = true;
         _app = context.ApplicationContext!;
         AppInfo.Load(_app);
+        LocalSettings.Load(_app);
 
         var http = new HttpClient { BaseAddress = new Uri(ServerUrl), Timeout = TimeSpan.FromSeconds(30) };
         Api = new ApiClient(http, AppInfo.InstallId(_app), AppInfo.Version, MacroPlatforms.Android);
@@ -127,12 +128,6 @@ internal static class Night
         }
     }
 
-    /// <summary>
-    /// A short pause before the first step: the bubble panel, Night-loop's screens and the game's own window are
-    /// still moving when Play is tapped, and a tap sent at that moment does nothing.
-    /// </summary>
-    public const int StartDelayMs = 700;
-
     /// <summary>Plays a document as it is (the editor's Play uses the copy on screen).</summary>
     public static async Task<string?> PlayAsync(Guid id, MacroDoc doc)
     {
@@ -147,7 +142,9 @@ internal static class Night
             return ex.Issues.Count > 0 ? ex.Issues[0].Message : ex.Message;
         }
         Stop(id);
-        await Task.Delay(StartDelayMs);
+        // A short pause before the first step (Settings › Start delay): the bubble panel, Night-loop's screens and
+        // the game's own window are still moving when Play is tapped, and a tap sent at that moment does nothing.
+        await Task.Delay(LocalSettings.StartDelayMs);
         try
         {
             var run = Runs.Start(compiled);

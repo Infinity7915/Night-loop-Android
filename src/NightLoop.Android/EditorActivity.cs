@@ -223,7 +223,7 @@ public sealed class EditorActivity : Activity
         var input = Ui.Input(this, "Macro name", _name);
         var box = Ui.Column(this, Palette.Dp(this, 20));
         box.AddView(input);
-        new AlertDialog.Builder(this).SetTitle("Rename")!.SetView(box)!
+        Dialogs.Builder(this).SetTitle("Rename")!.SetView(box)!
             .SetPositiveButton("OK", (_, _) =>
             {
                 var name = input.Text?.Trim() ?? "";
@@ -328,7 +328,7 @@ public sealed class EditorActivity : Activity
     {
         var block = _doc.Blocks[index];
         string[] items = ["Add a block below", "Duplicate", block.Enabled ? "Turn off (skip it)" : "Turn on", "Delete"];
-        new AlertDialog.Builder(this).SetTitle($"Block {index + 1}")!.SetItems(items, (_, e) =>
+        Dialogs.Builder(this).SetTitle($"Block {index + 1}")!.SetItems(items, (_, e) =>
         {
             switch (e.Which)
             {
@@ -365,7 +365,7 @@ public sealed class EditorActivity : Activity
     {
         var kinds = BlockKinds.All.Where(k => k.Type != BlockTypes.End).ToArray(); // End comes with If, Loop and Repeat until
         var names = kinds.Select(k => $"{k.Group} · {k.Name}").ToArray();
-        new AlertDialog.Builder(this).SetTitle("Add block")!.SetItems(names, (_, e) =>
+        Dialogs.Builder(this).SetTitle("Add block")!.SetItems(names, (_, e) =>
         {
             var kind = kinds[e.Which];
             var block = Block.Create(NextId(), kind.Type, kind.Defaults());

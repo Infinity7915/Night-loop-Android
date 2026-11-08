@@ -7,19 +7,59 @@ using Android.Widget;
 
 namespace NightLoop.Mobile.Screens;
 
-/// <summary>The Night colors from the PC app's default theme.</summary>
+/// <summary>
+/// The colors of the chosen theme, the same themes as the PC app (Settings › Theme). Night, the original purple, is
+/// the default. Screens are rebuilt after a change; the bubble picks it up the next time it opens something.
+/// </summary>
 internal static class Palette
 {
-    public static readonly Color Background = Color.ParseColor("#0F0B1A");
-    public static readonly Color Surface = Color.ParseColor("#1A1430");
-    public static readonly Color SurfaceHigh = Color.ParseColor("#241C40");
-    public static readonly Color Border = Color.ParseColor("#2E2550");
-    public static readonly Color Accent = Color.ParseColor("#A78BFA");
-    public static readonly Color Text = Color.ParseColor("#EDE9FE");
-    public static readonly Color TextQuiet = Color.ParseColor("#A59BC4");
-    public static readonly Color Good = Color.ParseColor("#4ADE80");
-    public static readonly Color Warn = Color.ParseColor("#FBBF24");
-    public static readonly Color Bad = Color.ParseColor("#F87171");
+    public sealed record Theme(string Id, string Name, bool Light, string Background, string Surface, string SurfaceHigh,
+        string Border, string Accent, string Text, string TextQuiet);
+
+    public static readonly Theme[] Themes =
+    [
+        new("night", "Night", false, "#0F0B1A", "#1A1430", "#241C40", "#2E2550", "#A78BFA", "#EDE9FE", "#A59BC4"),
+        new("rose", "Rose", false, "#1A0E15", "#24141E", "#301B28", "#44283B", "#F472B6", "#F7EAF1", "#B693A8"),
+        new("bloodmoon", "Blood moon", false, "#140A0A", "#1F1010", "#2B1616", "#422020", "#E5484D", "#F5E9E7", "#B08E89"),
+        new("ocean", "Ocean", false, "#0A121A", "#101C28", "#172736", "#22384C", "#38BDF8", "#E8F1F8", "#8AA3B8"),
+        new("cyber", "Cyber", false, "#0A0A12", "#11111F", "#1A1A2E", "#2A2A48", "#E4FF3A", "#EEF0FF", "#8F94BF"),
+        new("lunar", "Lunar", false, "#111317", "#191C22", "#22262E", "#31363F", "#C7D2FE", "#EDEFF3", "#969CA8"),
+        new("vanilla", "Vanilla", true, "#FAF2DC", "#FFF8E4", "#F4EACB", "#E4D5AC", "#C8892B", "#2B2414", "#75694A"),
+    ];
+
+    public static Theme Current { get; private set; } = Themes[0];
+    public static bool IsLight => Current.Light;
+
+    public static Color Background { get; private set; }
+    public static Color Surface { get; private set; }
+    public static Color SurfaceHigh { get; private set; }
+    public static Color Border { get; private set; }
+    public static Color Accent { get; private set; }
+    public static Color Text { get; private set; }
+    public static Color TextQuiet { get; private set; }
+    public static Color Good { get; private set; }
+    public static Color Warn { get; private set; }
+    public static Color Bad { get; private set; }
+
+    static Palette() => Apply(null);
+
+    /// <summary>Switches to a theme by id (unknown or null = Night).</summary>
+    public static void Apply(string? id)
+    {
+        var t = Themes.FirstOrDefault(x => x.Id == id) ?? Themes[0];
+        Current = t;
+        Background = Color.ParseColor(t.Background);
+        Surface = Color.ParseColor(t.Surface);
+        SurfaceHigh = Color.ParseColor(t.SurfaceHigh);
+        Border = Color.ParseColor(t.Border);
+        Accent = Color.ParseColor(t.Accent);
+        Text = Color.ParseColor(t.Text);
+        TextQuiet = Color.ParseColor(t.TextQuiet);
+        // Darker status colors on the light theme, so they stay readable.
+        Good = Color.ParseColor(t.Light ? "#15803D" : "#4ADE80");
+        Warn = Color.ParseColor(t.Light ? "#B45309" : "#FBBF24");
+        Bad = Color.ParseColor(t.Light ? "#B91C1C" : "#F87171");
+    }
 
     public static int Dp(Context context, float dp) => (int)(dp * context.Resources!.DisplayMetrics!.Density + 0.5f);
 }
