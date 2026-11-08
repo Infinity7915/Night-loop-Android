@@ -58,26 +58,44 @@ internal sealed class AccessibilityTouch : ITouchSender
 
     private static async Task DispatchAsync(Path path, int durationMs, CancellationToken ct)
     {
-        var service = Service;
         var duration = Math.Clamp(durationMs, 1, (int)GestureDescription.MaxGestureDuration);
         var gesture = new GestureDescription.Builder()
             .AddStroke(new GestureDescription.StrokeDescription(path, 0, duration))!
             .Build()!;
-        var done = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        Night.OnMain(() =>
+        // Android can briefly drop the service (it reconnects on its own) or refuse a gesture while another app
+        // is switching in. Try a few times before stopping the macro.
+        for (var attempt = 0; ; attempt++)
         {
-            if (!service.DispatchGesture(gesture, new GestureDone(done), null))
-                done.TrySetException(new MacroFaultException("Android didn't accept the touch. Check that Night-loop's accessibility service is on."));
-        });
-        await using (ct.Register(() => done.TrySetCanceled(ct)))
-            await done.Task;
+            var service = NightLoopAccessibilityService.Current;
+            if (service is not null)
+            {
+                var done = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                Night.OnMain(() =>
+                {
+                    try
+                    {
+                        if (!service.DispatchGesture(gesture, new GestureDone(done), null)) done.TrySetResult(false);
+                    }
+                    catch (Exception) { done.TrySetResult(false); }
+                });
+                bool accepted;
+                await using (ct.Register(() => done.TrySetCanceled(ct)))
+                    accepted = await done.Task;
+                if (accepted) return;
+            }
+            if (attempt >= 5)
+                throw new MacroFaultException(service is null
+                    ? "Android switched off Night-loop's accessibility service. Turn it on again in Set up."
+                    : "Android didn't accept the tap. Some emulators don't support taps from apps; try a real phone.");
+            await Task.Delay(200, ct);
+        }
     }
 
     /// <summary>Completes when Android has played the gesture. A cancelled one (you touched the screen) still counts.</summary>
-    private sealed class GestureDone(TaskCompletionSource done) : AccessibilityService.GestureResultCallback
+    private sealed class GestureDone(TaskCompletionSource<bool> done) : AccessibilityService.GestureResultCallback
     {
-        public override void OnCompleted(GestureDescription? gestureDescription) => done.TrySetResult();
-        public override void OnCancelled(GestureDescription? gestureDescription) => done.TrySetResult();
+        public override void OnCompleted(GestureDescription? gestureDescription) => done.TrySetResult(true);
+        public override void OnCancelled(GestureDescription? gestureDescription) => done.TrySetResult(true);
     }
 }
 
