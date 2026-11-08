@@ -12,8 +12,13 @@ namespace NightLoop.Mobile.Editor;
 /// <summary>The window that edits one block's settings. Works on a copy; OK hands the copy back.</summary>
 internal static class BlockDialog
 {
-    public static void Show(Activity activity, Block block, bool isNew, Action<Block> done)
+    /// <summary>
+    /// From the bubble (<paramref name="context"/> isn't an Activity) spots aren't typed in: the step's dots are
+    /// dragged on the screen instead.
+    /// </summary>
+    public static void Show(Context context, Block block, bool isNew, Action<Block> done)
     {
+        var activity = Dialogs.Themed(context);
         var kind = BlockKinds.For(block.Type);
         var copy = Copy(block);
         var body = Ui.Column(activity, Palette.Dp(activity, 20));
@@ -25,7 +30,7 @@ internal static class BlockDialog
             foreach (var field in kind.Fields)
                 AddField(activity, body, copy, field, apply, isNew, done);
 
-        var builder = new AlertDialog.Builder(activity)
+        var builder = Dialogs.Builder(context)
             .SetTitle(kind?.Name ?? block.Type)!
             .SetView(Ui.Scroll(activity, body))!
             .SetPositiveButton(isNew ? "Add" : "OK", (_, _) =>
@@ -34,9 +39,7 @@ internal static class BlockDialog
                 done(copy);
             })!
             .SetNegativeButton("Cancel", (_, _) => { })!;
-        var dialog = builder.Create()!;
-        Current = dialog;
-        dialog.Show();
+        Current = Dialogs.Show(context, builder);
     }
 
     /// <summary>The open window, so "Pick on screen" can close it while you pick.</summary>
@@ -58,7 +61,7 @@ internal static class BlockDialog
         body.AddView(label);
     }
 
-    private static void AddField(Activity a, LinearLayout body, Block copy, Field field, List<Action> apply, bool isNew, Action<Block> done)
+    private static void AddField(Context a, LinearLayout body, Block copy, Field field, List<Action> apply, bool isNew, Action<Block> done)
     {
         var p = copy.Params;
         Label(a, body, field.Label);
@@ -94,6 +97,9 @@ internal static class BlockDialog
                 });
                 break;
             }
+            case SpotField when a is not Activity:
+                body.AddView(Ui.Text(a, "Drag its dots on the screen to move it.", 14, Palette.TextQuiet));
+                break;
             case SpotField f:
             {
                 var point = f.Key.Length == 0 ? (copy.GetInt("x") is { } x && copy.GetInt("y") is { } y ? (x, y) : ((int, int)?)null) : copy.GetPoint(f.Key);
@@ -121,7 +127,7 @@ internal static class BlockDialog
                     var spots = copy.Type == BlockTypes.Swipe
                         ? new[] { "Touch where the swipe starts", "Touch where the swipe ends" }
                         : new[] { "Touch the spot to tap" };
-                    ScreenPicker.Pick(a, spots, picked =>
+                    ScreenPicker.Pick((Activity)a, spots, picked =>
                     {
                         if (copy.Type == BlockTypes.Swipe && picked.Count == 2)
                         {
@@ -199,11 +205,11 @@ internal static class BlockDialog
                 {
                     var names = Night.AndroidMacros.Select(m => m.Name).ToArray();
                     if (names.Length == 0) return;
-                    new AlertDialog.Builder(a).SetTitle(f.Label)!.SetItems(names, (_, e) =>
+                    Dialogs.Show(a, Dialogs.Builder(a).SetTitle(f.Label)!.SetItems(names, (_, e) =>
                     {
                         name = names[e.Which];
                         button.Text = name;
-                    })!.Show();
+                    })!);
                 };
                 body.AddView(button);
                 apply.Add(() => p[f.Key] = name);

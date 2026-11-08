@@ -68,6 +68,7 @@ jobs:
           KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           STORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          PRE: ${{ github.event_name == 'workflow_dispatch' && inputs.prerelease || false }}
         run: |
           if [ -n "$KEYSTORE" ] && [ -n "$STORE_PASS" ] && [ -n "$ALIAS" ]; then
             echo "$KEYSTORE" | base64 -d > "$RUNNER_TEMP/release.keystore"
@@ -76,8 +77,11 @@ jobs:
               echo "STORE_PASS=$STORE_PASS"
             } >> "$GITHUB_ENV"
             echo "Signing with the release key."
-          else
+          elif [ "$PRE" = "true" ]; then
             echo "No release key secrets: signing with a debug key (preview)."
+          else
+            echo "::error::An official (non-preview) release must be signed with the release key. Add the ANDROID_KEYSTORE_* secrets (docs/signing-key.md) or run it as a preview."
+            exit 1
           fi
 
       - name: Build the .apk

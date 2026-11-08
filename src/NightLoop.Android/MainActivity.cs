@@ -24,7 +24,7 @@ namespace NightLoop.Mobile;
           ConfigurationChanges = ConfigChanges.Orientation | ConfigChanges.ScreenSize)]
 public sealed class MainActivity : Activity
 {
-    private enum Screen { Loading, SignIn, Code, Home }
+    private enum Screen { Loading, SignIn, Code, Home, Settings }
 
     private Screen _screen = Screen.Loading;
     private Guid _challenge;
@@ -106,7 +106,7 @@ public sealed class MainActivity : Activity
             await Updater.InstallAsync(this, update, percent => RunOnUiThread(() => note.Text = $"Downloading… {percent}%"));
             RunOnUiThread(() => note.Text = "Downloaded. Confirm the update in Android's window.");
         }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or IOException or Java.Lang.Exception)
+        catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException or TaskCanceledException or IOException or Java.Lang.Exception)
         {
             RunOnUiThread(() =>
             {
@@ -136,6 +136,7 @@ public sealed class MainActivity : Activity
             RefreshSetup();
             _ = LoadMacrosAsync();
         }
+        else if (_screen == Screen.Settings) Show(Screen.Settings); // a permission may have changed
     }
 
     public override void OnRequestPermissionsResult(int requestCode, string[] permissions, Permission[] grantResults)
@@ -289,8 +290,14 @@ public sealed class MainActivity : Activity
             case Screen.Home:
                 BuildHome(page);
                 break;
+            case Screen.Settings:
+                BuildSettings(page);
+                break;
         }
-        SetContentView(Ui.Scroll(this, page));
+        var root = Ui.Scroll(this, page);
+        // Another app's see-through window over the sign-in or code screen can't pass taps through to it (tapjacking).
+        root.FilterTouchesWhenObscured = screen is Screen.SignIn or Screen.Code;
+        SetContentView(root);
         if (screen == Screen.Home)
         {
             RefreshSetup();
@@ -305,7 +312,7 @@ public sealed class MainActivity : Activity
 
     private void BuildSignIn(LinearLayout page)
     {
-        page.AddView(Ui.Text(this, $"Android preview {AppInfo.Version}", 14, Palette.TextQuiet));
+        page.AddView(Ui.Text(this, $"Night-loop for Android {AppInfo.Version}", 14, Palette.TextQuiet));
         page.AddView(Ui.Heading(this, "Sign in"));
         var card = Ui.Card(this);
         var email = Ui.Input(this, "Email", _email, InputTypes.ClassText | InputTypes.TextVariationEmailAddress);
@@ -361,7 +368,7 @@ public sealed class MainActivity : Activity
         var user = Night.Session.User;
         var account = Ui.Row(this);
         account.AddView(Ui.Fill(Ui.Text(this, user is null ? "" : $"{user.Username} · {user.Email}", 14, Palette.TextQuiet)));
-        account.AddView(Ui.Button(this, "Sign out", () => _ = SignOutAsync(), primary: false));
+        account.AddView(Ui.Button(this, "⚙ Settings", () => Show(Screen.Settings), primary: false));
         page.AddView(account);
 
         _steps = Ui.Column(this, 0);
@@ -379,6 +386,91 @@ public sealed class MainActivity : Activity
         _macroList.SetPadding(0, Palette.Dp(this, 10), 0, 0);
         page.AddView(_macroList);
         FillMacros();
+    }
+
+    // ---- Settings ----
+
+    private void BuildSettings(LinearLayout page)
+    {
+        var top = Ui.Row(this);
+        top.AddView(Ui.Button(this, "← Back", () => Show(Screen.Home), primary: false));
+        top.AddView(Ui.Fill(Ui.Text(this, "Settings", 20, Palette.Text, bold: true)));
+        page.AddView(top);
+
+        page.AddView(Ui.Heading(this, "Theme"));
+        var themes = Ui.Card(this);
+        themes.AddView(Ui.Text(this, "The same themes as Night-loop on PC. Kept on this phone.", 13, Palette.TextQuiet));
+        foreach (var theme in Palette.Themes)
+        {
+            var row = Ui.Row(this);
+            row.SetPadding(0, Palette.Dp(this, 8), 0, Palette.Dp(this, 8));
+            var swatch = new View(this)
+            {
+                Background = Ui.Rounded(this, global::Android.Graphics.Color.ParseColor(theme.Background), 8,
+                    global::Android.Graphics.Color.ParseColor(theme.Accent)),
+            };
+            row.AddView(swatch, new LinearLayout.LayoutParams(Palette.Dp(this, 28), Palette.Dp(this, 28)));
+            var dot = new View(this) { Background = Ui.Rounded(this, global::Android.Graphics.Color.ParseColor(theme.Accent), 6) };
+            var dotLayout = new LinearLayout.LayoutParams(Palette.Dp(this, 12), Palette.Dp(this, 12));
+            dotLayout.SetMargins(Palette.Dp(this, 8), 0, Palette.Dp(this, 12), 0);
+            row.AddView(dot, dotLayout);
+            var current = theme.Id == Palette.Current.Id;
+            row.AddView(Ui.Fill(Ui.Text(this, current ? $"{theme.Name}  ✓" : theme.Name, 16, current ? Palette.Accent : Palette.Text, bold: current)));
+            row.Click += (_, _) =>
+            {
+                LocalSettings.Theme = theme.Id;
+                Show(Screen.Settings);
+            };
+            themes.AddView(row);
+        }
+        page.AddView(themes);
+
+        page.AddView(Ui.Heading(this, "Limits"));
+        var limits = Ui.Card(this);
+        limits.AddView(Ui.Text(this, "Loading…", 14, Palette.TextQuiet));
+        page.AddView(limits);
+        _ = LoadLimitsAsync(limits);
+
+        page.AddView(Ui.Heading(this, "Playing"));
+        var playing = Ui.Card(this);
+        playing.AddView(Ui.Text(this, "Start delay (ms): how long Play waits before the first step, so the game is in front and the first tap lands.", 14, Palette.Text));
+        var delay = Ui.Number(this, LocalSettings.StartDelayDefaultMs.ToString(), LocalSettings.StartDelayMs);
+        delay.FocusChange += (_, e) =>
+        {
+            if (e.HasFocus) return;
+            LocalSettings.StartDelayMs = int.TryParse(delay.Text, out var ms) ? ms : LocalSettings.StartDelayDefaultMs;
+            delay.Text = LocalSettings.StartDelayMs.ToString();
+        };
+        playing.AddView(delay);
+        playing.AddView(Ui.Text(this, $"0 – {LocalSettings.StartDelayMaxMs} ms. Default {LocalSettings.StartDelayDefaultMs}.", 12, Palette.TextQuiet));
+        page.AddView(playing);
+
+        page.AddView(Ui.Heading(this, "Account"));
+        var account = Ui.Card(this);
+        var user = Night.Session.User;
+        if (user is not null)
+        {
+            account.AddView(Ui.Text(this, user.Username, 16, Palette.Text, bold: true));
+            account.AddView(Ui.Text(this, user.Email, 14, Palette.TextQuiet));
+        }
+        account.AddView(Ui.Text(this, "One device can be signed in at a time. Change your name, email or password in Night-loop on your PC.", 13, Palette.TextQuiet));
+        var buttons = Ui.Row(this);
+        buttons.AddView(Ui.Button(this, "Download my data", () => _ = DownloadDataAsync(), primary: false));
+        buttons.AddView(Ui.Button(this, "Sign out", () => _ = SignOutAsync(), primary: false));
+        account.AddView(buttons);
+        page.AddView(account);
+
+        page.AddView(Ui.Heading(this, "Permissions"));
+        var permissions = Ui.Card(this);
+        foreach (var step in Permissions.Steps(this))
+        {
+            var row = Ui.Row(this);
+            row.AddView(Ui.Fill(Ui.Text(this, step.Title, 15, Palette.Text)));
+            row.AddView(Ui.Text(this, step.Done ? "On" : "Off", 14, step.Done ? Palette.Good : Palette.Warn, bold: true));
+            row.AddView(Ui.Button(this, "Open", () => step.Open(this), primary: false));
+            permissions.AddView(row);
+        }
+        page.AddView(permissions);
 
         page.AddView(Ui.Heading(this, "About"));
         var about = Ui.Card(this);
@@ -386,6 +478,79 @@ public sealed class MainActivity : Activity
         about.AddView(Ui.Button(this, "Check for updates", () => _ = CheckForUpdateAsync(quiet: false), primary: false));
         page.AddView(about);
     }
+
+    private async Task LoadLimitsAsync(LinearLayout card)
+    {
+        try
+        {
+            var u = await Night.Api.GetLimitsAsync();
+            RunOnUiThread(() =>
+            {
+                card.RemoveAllViews();
+                Line("Macros", $"{u.Macros} of {u.MacrosMax}");
+                Line("Blocks", $"{u.Blocks:N0} of {u.BlocksMax:N0}");
+                Line("New macros today", $"{u.NewMacrosToday} of {u.NewMacrosPerDay}");
+                Line("Blocks placed today", $"{u.BlocksToday} of {u.BlocksPerDay}");
+                card.AddView(Ui.Text(this, $"Daily counts reset at {u.ResetsAt.ToLocalTime():HH:mm} (midnight UTC).", 13, Palette.TextQuiet));
+            });
+
+            void Line(string name, string value)
+            {
+                var row = Ui.Row(this);
+                row.AddView(Ui.Fill(Ui.Text(this, name, 15, Palette.Text)));
+                row.AddView(Ui.Text(this, value, 15, Palette.Accent, bold: true));
+                card.AddView(row);
+            }
+        }
+        catch (Exception ex) when (ex is ApiException or ServerUnreachableException)
+        {
+            RunOnUiThread(() =>
+            {
+                card.RemoveAllViews();
+                card.AddView(Ui.Text(this, ex.Message, 14, Palette.Bad));
+            });
+        }
+    }
+
+    /// <summary>A text summary of the account (like the PC app's Download my data), shared to wherever you pick.</summary>
+    private async Task DownloadDataAsync()
+    {
+        try
+        {
+            var d = await Night.Api.GetAccountDataAsync();
+            var text =
+                $"Night-loop account data\n" +
+                $"Exported: {d.ExportedAt.ToLocalTime():yyyy-MM-dd HH:mm}\n\n" +
+                $"Username: {d.Username}\nEmail: {d.Email}\nUser number: {d.UserNumber}\n" +
+                $"Created: {d.CreatedAt.ToLocalTime():yyyy-MM-dd}\n" +
+                $"Password: {(d.PasswordSet ? "set (hidden)" : "not set")}\n" +
+                $"Time used: {TimeSpan.FromSeconds(d.UsageSeconds):%d'd 'hh'h 'mm'm'}\n" +
+                $"Macros: {d.MacroCount}\n";
+            RunOnUiThread(() =>
+            {
+                var share = new Intent(Intent.ActionSend).SetType("text/plain")!
+                    .PutExtra(Intent.ExtraSubject, "Night-loop account data")!
+                    .PutExtra(Intent.ExtraText, text)!;
+                StartActivity(Intent.CreateChooser(share, "Save or send your data"));
+            });
+        }
+        catch (Exception ex) when (ex is ApiException or ServerUnreachableException)
+        {
+            RunOnUiThread(() => Ui.Toast(this, ex.Message));
+        }
+    }
+
+#pragma warning disable CS0672, CA1422 // Back on older Androids; newer ones route it here too for plain activities.
+    public override void OnBackPressed()
+    {
+        if (_screen == Screen.Settings)
+        {
+            Show(Screen.Home);
+            return;
+        }
+        base.OnBackPressed();
+    }
+#pragma warning restore CS0672, CA1422
 
     private void RefreshSetup()
     {
@@ -476,7 +641,7 @@ public sealed class MainActivity : Activity
         var name = Ui.Input(this, "Macro name", "New macro");
         var box = Ui.Column(this, Palette.Dp(this, 20));
         box.AddView(name);
-        new AlertDialog.Builder(this)
+        Dialogs.Builder(this)
             .SetTitle("New Android macro")!
             .SetView(box)!
             .SetPositiveButton("Create", (_, _) =>

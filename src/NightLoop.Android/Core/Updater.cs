@@ -47,11 +47,16 @@ internal static class Updater
         return releases
             .Where(r => !r.Draft && Version.TryParse(r.TagName.TrimStart('v'), out _))
             .Select(r => (Version: Version.Parse(r.TagName.TrimStart('v')), Apk: r.Assets.FirstOrDefault(a => a.Name.EndsWith(".apk", StringComparison.OrdinalIgnoreCase))))
-            .Where(r => r.Apk is not null && r.Version > Current)
+            .Where(r => r.Apk is not null && r.Version > Current && IsOurDownload(r.Apk.Url))
             .OrderByDescending(r => r.Version)
             .Select(r => new Update(r.Version, r.Apk!.Url, r.Apk.Size))
             .FirstOrDefault();
     }
+
+    /// <summary>Only .apk files attached to this repository's releases, over HTTPS (GitHub redirects them to its file host).</summary>
+    private static bool IsOurDownload(string url) =>
+        Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps && uri.Host == "github.com"
+        && uri.AbsolutePath.StartsWith("/Infinity7915/Night-loop-Android/releases/download/", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Whether Android lets Night-loop install updates ("Install unknown apps").</summary>
     public static bool CanInstall(Context context) => context.PackageManager!.CanRequestPackageInstalls();
@@ -68,6 +73,7 @@ internal static class Updater
         foreach (var old in Directory.GetFiles(folder)) File.Delete(old);
         var file = System.IO.Path.Combine(folder, $"Night-loop-{update.Version}.apk");
 
+        if (!IsOurDownload(update.ApkUrl)) throw new InvalidOperationException("That update doesn't come from Night-loop's releases.");
         using (var response = await Http.GetAsync(update.ApkUrl, HttpCompletionOption.ResponseHeadersRead, ct))
         {
             response.EnsureSuccessStatusCode();
