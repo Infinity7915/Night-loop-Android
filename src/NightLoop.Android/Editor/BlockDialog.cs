@@ -263,8 +263,10 @@ internal static class BlockDialog
 
     private static readonly (string Kind, string Text)[] CheckKinds =
     [
-        ("appInFront", "An app is in front"), ("textVisible", "Text is on screen"),
-        ("imageVisible", "A picture is on screen"), ("pixelColor", "A spot is a color"),
+        ("appInFront", "App is open (in front)"), ("!appInFront", "App is not open (not in front)"),
+        ("textVisible", "Text is on screen"), ("!textVisible", "Text is not on screen"),
+        ("imageVisible", "Picture is on screen"), ("!imageVisible", "Picture is not on screen"),
+        ("pixelColor", "Spot is a color"), ("!pixelColor", "Spot is not that color"),
     ];
 
     private static void AddCondition(Context a, LinearLayout body, Block copy, List<Action> apply, bool isNew, Action<Block> done)
@@ -287,14 +289,11 @@ internal static class BlockDialog
             radio.SetTextColor(Palette.Text);
             ids[radio.Id] = value;
             group.AddView(radio);
-            if (value == kind) radio.Checked = true;
+            if (value == (negated ? "!" + kind : kind)) radio.Checked = true;
         }
         body.AddView(group);
         var details = Ui.Column(a, 0);
         body.AddView(details);
-        var not = new CheckBox(a) { Text = "Check the opposite (NOT)", Checked = negated };
-        not.SetTextColor(Palette.Text);
-        body.AddView(not);
 
         Func<JsonObject> read = () => inner;
         void Fill(string k)
@@ -403,12 +402,14 @@ internal static class BlockDialog
         void Save()
         {
             var check = read();
-            p["condition"] = not.Checked ? new JsonObject { ["kind"] = "not", ["condition"] = check } : check;
+            p["condition"] = negated ? new JsonObject { ["kind"] = "not", ["condition"] = check } : check;
         }
         Fill(kind);
         group.CheckedChange += (_, e) =>
         {
-            if (ids.TryGetValue(e.CheckedId, out var k)) Fill(k);
+            if (!ids.TryGetValue(e.CheckedId, out var k)) return;
+            negated = k.StartsWith('!');
+            Fill(k.TrimStart('!'));
         };
         apply.Add(Save);
     }

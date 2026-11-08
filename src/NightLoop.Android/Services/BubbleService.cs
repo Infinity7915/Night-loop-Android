@@ -47,13 +47,20 @@ public sealed class BubbleService : Service
         if (intent?.Action == ActionCapture)
         {
             // Android only hands over screen capture to a service that is already a screen-capture service.
-            StartAsForeground(capture: true);
+            var allowed = true;
+            try { StartAsForeground(capture: true); }
+            catch (Java.Lang.Exception)
+            {
+                // Android refused screen capture for this service: keep the bubble running without it.
+                allowed = false;
+                StartAsForeground(capture: false);
+            }
 #pragma warning disable CS0618, CA1422
             var data = OperatingSystem.IsAndroidVersionAtLeast(33)
                 ? intent.GetParcelableExtra("data", Java.Lang.Class.FromType(typeof(Intent))) as Intent
                 : intent.GetParcelableExtra("data") as Intent;
 #pragma warning restore CS0618, CA1422
-            if (data is not null) ScreenCapture.Instance.Start(this, intent.GetIntExtra("code", 0), data);
+            if (allowed && data is not null) ScreenCapture.Instance.Start(this, intent.GetIntExtra("code", 0), data);
         }
         else StartAsForeground(capture: ScreenCapture.Ready);
         if (_bubble is null && Setup.Permissions.CanDrawOverlays(this)) ShowBubble();
