@@ -1,12 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Night-loop only performs taps and swipes that a macro asks for, and notices which app is open.
+<!-- Night-loop only performs taps, swipes and typing (into the focused text box, Android 13+) that a macro asks
+     for, and notices which app is open.
      It does not read what is on screen through accessibility (screen reading uses screen capture). -->
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
     android:description="@string/accessibility_description"
     android:summary="@string/accessibility_summary"
     android:accessibilityEventTypes="typeWindowStateChanged"
     android:accessibilityFeedbackType="feedbackGeneric"
-    android:accessibilityFlags="flagDefault"
+    android:accessibilityFlags="flagDefault|flagInputMethodEditor"
     android:canPerformGestures="true"
     android:canRetrieveWindowContent="false"
     android:notificationTimeout="100" />
