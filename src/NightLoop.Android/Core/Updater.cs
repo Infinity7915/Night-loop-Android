@@ -145,3 +145,32 @@ public sealed class UpdateInstallResult : BroadcastReceiver
         }
     }
 }
+
+/// <summary>
+/// After an update installs, Android closes the old Night-loop and doesn't reopen it. This shows a notice
+/// ("Night-loop updated, tap to open") so it doesn't look like nothing happened.
+/// </summary>
+[BroadcastReceiver(Name = "win.nightloop.app.UpdatedReceiver", Exported = true)]
+[IntentFilter([Intent.ActionMyPackageReplaced])]
+public sealed class UpdatedReceiver : BroadcastReceiver
+{
+    private const string Channel = "updates";
+
+    public override void OnReceive(Context? context, Intent? intent)
+    {
+        if (context is null || intent?.Action != Intent.ActionMyPackageReplaced) return;
+        var manager = (NotificationManager)context.GetSystemService(Context.NotificationService)!;
+        manager.CreateNotificationChannel(new NotificationChannel(Channel, "Updates", NotificationImportance.High));
+        var open = PendingIntent.GetActivity(context, 1,
+            new Intent(context, typeof(MainActivity)).AddFlags(ActivityFlags.NewTask), PendingIntentFlags.Immutable);
+        var version = context.PackageManager!.GetPackageInfo(context.PackageName!, 0)!.VersionName;
+        var notification = new Notification.Builder(context, Channel)
+            .SetContentTitle($"Night-loop updated to {version}")
+            .SetContentText("Tap to open it.")
+            .SetSmallIcon(Resource.Drawable.ic_nightloop)
+            .SetContentIntent(open)
+            .SetAutoCancel(true)
+            .Build();
+        manager.Notify(7001, notification);
+    }
+}
