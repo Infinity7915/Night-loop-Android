@@ -47,4 +47,20 @@ internal static class LocalSettings
         get => _prefs?.GetBoolean("hide_bar_playing", false) ?? false;
         set => _prefs?.Edit()!.PutBoolean("hide_bar_playing", value)!.Apply();
     }
+
+    public const int WaitAfterMaxMs = 2000;
+
+    /// <summary>Settings › Wait after taps (ms): after Tap, Long press and Swipe unless the block sets its own.</summary>
+    public static int WaitAfterTapsMs
+    {
+        get => Math.Clamp(_prefs?.GetInt("wait_after_taps_ms", 0) ?? 0, 0, WaitAfterMaxMs);
+        set { _prefs?.Edit()!.PutInt("wait_after_taps_ms", Math.Clamp(value, 0, WaitAfterMaxMs))!.Apply(); Night.Waits.AfterClicksMs = value; }
+    }
+
+    /// <summary>Settings › Wait after every block (ms), like the PC app's.</summary>
+    public static int WaitAfterBlocksMs
+    {
+        get => Math.Clamp(_prefs?.GetInt("wait_after_blocks_ms", 0) ?? 0, 0, WaitAfterMaxMs);
+        set { _prefs?.Edit()!.PutInt("wait_after_blocks_ms", Math.Clamp(value, 0, WaitAfterMaxMs))!.Apply(); Night.Waits.AfterBlocksMs = value; }
+    }
 }

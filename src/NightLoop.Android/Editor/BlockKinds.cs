@@ -16,7 +16,11 @@ internal sealed record BoolField(string Key, string Label, bool Default) : Field
 internal sealed record AppField(string Key, string Label) : Field(Key, Label);
 /// <summary>Another Android macro, by name.</summary>
 internal sealed record MacroField(string Key, string Label) : Field(Key, Label);
-/// <summary>If / Repeat until: "App in front" (or not).</summary>
+/// <summary>A picture to look for: drag a box on the screen (stored as imageData).</summary>
+internal sealed record PictureField() : Field("imageData", "Picture");
+/// <summary>A point and its color, picked by touching the screen (x, y, color).</summary>
+internal sealed record PixelField() : Field("color", "Spot and color");
+/// <summary>If / Repeat until: app in front, text / picture on screen, or a pixel's color (or NOT).</summary>
 internal sealed record ConditionField() : Field("condition", "Check");
 /// <summary>Loop count, where blank means Infinite (stored as forever: true).</summary>
 internal sealed record LoopCountField() : Field("count", "Times (blank = Infinite)");
@@ -27,6 +31,33 @@ internal sealed record BlockKind(string Type, string Name, string Group, Func<Js
 internal static class BlockKinds
 {
     private static readonly (string, string)[] Buttons = [("back", "Back"), ("home", "Home"), ("recents", "Recent apps"), ("notifications", "Notifications")];
+
+    private static readonly (string, string)[] Matches = [("exact", "Exact words"), ("contains", "Contains (part of a word counts)")];
+    private static readonly (string, string)[] OnFails = [("continue", "Go on"), ("retry", "Try again"), ("goto", "Go to a label"), ("stop", "Stop the macro")];
+
+    private static Field[] TextFields =>
+    [
+        new TextField("text", "Text to look for"), new ChoiceField("match", "Match", Matches),
+        new BoolField("matchCase", "Match capital letters", false),
+        new IntField("timeoutMs", "Give up after (ms, blank = Infinite)", "Infinite"),
+        new ChoiceField("onFail", "If it gives up", OnFails), new TextField("failLabel", "Label to go to (for Go to a label)"),
+    ];
+
+    private static Field[] PictureFields =>
+    [
+        new PictureField(), new IntField("confidencePct", "Confidence % (1–100)", "90"),
+        new IntField("sizeTolerancePct", "Size tolerance % (blank = automatic)", "auto"),
+        new BoolField("matchColor", "Match colors", true),
+        new IntField("timeoutMs", "Give up after (ms, blank = Infinite)", "Infinite"),
+        new ChoiceField("onFail", "If it gives up", OnFails), new TextField("failLabel", "Label to go to (for Go to a label)"),
+    ];
+
+    private static Field[] PixelFields =>
+    [
+        new PixelField(), new IntField("tolerance", "Color tolerance (0–255)", "10"),
+        new IntField("timeoutMs", "Give up after (ms, blank = Infinite)", "Infinite"),
+        new ChoiceField("onFail", "If it gives up", OnFails), new TextField("failLabel", "Label to go to (for Go to a label)"),
+    ];
 
     public static readonly BlockKind[] All =
     [
@@ -75,6 +106,19 @@ internal static class BlockKinds
             [new IntField("minMs", "At least (ms)", "300", Required: true), new IntField("maxMs", "At most (ms)", "800", Required: true)],
             b => $"Wait {b.GetInt("minMs", 0)}–{b.GetInt("maxMs", 0)} ms"),
 
+        new(BlockTypes.WaitForText, "Wait for text", "Screen", () => new() { ["text"] = "", ["match"] = "contains", ["timeoutMs"] = 10_000 },
+            TextFields, b => $"Wait for \"{b.GetString("text", "")}\""),
+        new(BlockTypes.WaitForTextGone, "Wait until text is gone", "Screen", () => new() { ["text"] = "", ["match"] = "contains", ["timeoutMs"] = 10_000 },
+            TextFields, b => $"Wait until \"{b.GetString("text", "")}\" is gone"),
+        new(BlockTypes.WaitForImage, "Wait for picture", "Screen", () => new() { ["confidencePct"] = 90, ["timeoutMs"] = 10_000 },
+            PictureFields, b => b.GetString("imageData") is { Length: > 0 } ? $"Wait for picture · {b.GetInt("confidencePct", 90)}%" : "Wait for picture (none yet)"),
+        new(BlockTypes.WaitForImageGone, "Wait until picture is gone", "Screen", () => new() { ["confidencePct"] = 90, ["timeoutMs"] = 10_000 },
+            PictureFields, b => b.GetString("imageData") is { Length: > 0 } ? "Wait until picture is gone" : "Wait until picture is gone (none yet)"),
+        new(BlockTypes.DetectPixelColor, "Wait for color", "Screen", () => new() { ["x"] = 540, ["y"] = 1200, ["color"] = "#FFFFFF", ["tolerance"] = 10, ["timeoutMs"] = 5000 },
+            PixelFields, b => $"Wait for {b.GetString("color", "")} at {b.GetInt("x", 0)}, {b.GetInt("y", 0)}"),
+        new(BlockTypes.DetectPixelColorGone, "Wait until color is gone", "Screen", () => new() { ["x"] = 540, ["y"] = 1200, ["color"] = "#FFFFFF", ["tolerance"] = 10, ["timeoutMs"] = 5000 },
+            PixelFields, b => $"Wait until {b.GetInt("x", 0)}, {b.GetInt("y", 0)} isn't {b.GetString("color", "")}"),
+
         new(BlockTypes.Loop, "Loop", "Logic", () => new() { ["count"] = 5 }, [new LoopCountField()],
             b => b.GetBool("forever") == true ? "Loop forever" : $"Loop {b.GetInt("count", 1)} times"),
         new(BlockTypes.If, "If", "Logic", () => new() { ["condition"] = new JsonObject { ["kind"] = "appInFront", ["package"] = "" } },
@@ -121,12 +165,16 @@ internal static class BlockKinds
         return kind switch
         {
             "appInFront" => $"{AppName(Str(c!["package"]))} is in front",
-            "not" when c!["condition"] is JsonObject inner && Str(inner["kind"]) == "appInFront" =>
-                $"{AppName(Str(inner["package"]))} is not in front",
+            "textVisible" => $"\"{Str(c!["text"])}\" is on screen",
+            "imageVisible" => "the picture is on screen",
+            "pixelColor" => $"{Str(c!["color"])} is at {Num(c!["x"])}, {Num(c!["y"])}",
+            "not" when c!["condition"] is JsonObject inner => "NOT: " + DescribeCondition(inner),
             null => "(no check)",
             _ => "a check made elsewhere",
         };
     }
+
+    private static int Num(JsonNode? node) => (node as JsonValue)?.TryGetValue(out int i) == true ? i : 0;
 
     public static string? Str(JsonNode? node) => (node as JsonValue)?.TryGetValue(out string? s) == true ? s : null;
 
