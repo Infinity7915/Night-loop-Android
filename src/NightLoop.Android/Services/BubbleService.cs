@@ -74,6 +74,7 @@ public sealed class BubbleService : Service
         Night.MacrosChanged -= FillPanel;
         _editor?.Dismiss();
         ClosePanel();
+        Core.Overlays.Untrack(_bubble);
         if (_bubble is not null) _windows?.RemoveView(_bubble);
         _bubble = null;
         ScreenCapture.Instance.Stop();
@@ -131,6 +132,7 @@ public sealed class BubbleService : Service
         };
         bubble.SetOnTouchListener(new BubbleDrag(this, layout));
         _windows.AddView(bubble, layout);
+        Core.Overlays.Track(bubble, layout, _windows);
         _bubble = bubble;
         _bubbleLayout = layout;
         Night.RunsChanged += OnRunsChanged;
@@ -181,6 +183,7 @@ public sealed class BubbleService : Service
             Y = (_bubbleLayout?.Y ?? 0) + Palette.Dp(this, 64),
         };
         _windows!.AddView(panel, layout);
+        Core.Overlays.Track(panel, layout, _windows);
         _panel = panel;
         FillPanel();
         if (Night.Session.IsSignedIn) _ = RefreshAsync();
@@ -312,6 +315,7 @@ public sealed class BubbleService : Service
 
     private void ClosePanel()
     {
+        Core.Overlays.Untrack(_panel);
         if (_panel is not null) _windows?.RemoveView(_panel);
         _panel = null;
         _panelList = null;

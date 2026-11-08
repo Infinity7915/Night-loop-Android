@@ -59,6 +59,7 @@ internal sealed class DotEditor
         public string Key = "Enter";
         public string Text = "";
         public int KeyHoldMs = 50;
+        public int TypeDelayMs = 30; // Type text: wait between letters
         // Swipe and every other block: the block itself (a swipe's from/to follow its dots).
         public Block? Block;
 
@@ -173,7 +174,7 @@ internal sealed class DotEditor
                     WaitMs = 0,
                 },
                 BlockTypes.Wait => new Step { Kind = Kind.Wait, Ms = b.GetInt("ms", 1000) },
-                BlockTypes.Type => new Step { Kind = Kind.Key, KeyMode = "type", Text = b.GetString("text", "") },
+                BlockTypes.Type => new Step { Kind = Kind.Key, KeyMode = "type", Text = b.GetString("text", ""), TypeDelayMs = b.GetInt("delayMs", 10) },
                 BlockTypes.Key => new Step
                 {
                     Kind = Kind.Key,
@@ -252,6 +253,7 @@ internal sealed class DotEditor
         // Drag the toolbar by its title when it covers the spot you need.
         _title.SetOnTouchListener(new Drag(this, _toolbarLayout, null, end: false));
         _windows.AddView(bar, _toolbarLayout);
+        Core.Overlays.Track(bar, _toolbarLayout, _windows);
         _toolbar = bar;
     }
 
@@ -312,6 +314,7 @@ internal sealed class DotEditor
         {
             if (_isPlaying) PassThrough(view, layout, true);
             _windows.AddView(view, layout);
+            Core.Overlays.Track(view, layout, _windows); // a tap under this dot goes to the app, not the dot
         }
     }
 
@@ -563,7 +566,10 @@ internal sealed class DotEditor
     {
         CloseCard();
         foreach (var (view, _) in step.Windows())
+        {
+            Core.Overlays.Untrack(view);
             if (view.IsAttachedToWindow) _windows.RemoveView(view);
+        }
         _steps.Remove(step);
         if (_selected == step) _selected = null;
         Changed();
@@ -586,6 +592,7 @@ internal sealed class DotEditor
             Key = step.Key,
             Text = step.Text,
             KeyHoldMs = step.KeyHoldMs,
+            TypeDelayMs = step.TypeDelayMs,
             Block = step.Block is null ? null : Copy(step.Block),
         };
         if (copy.Block is not null)
@@ -673,6 +680,7 @@ internal sealed class DotEditor
             Y = _listY ?? (_toolbarLayout?.Y ?? 0) + Math.Max(_toolbar?.Height ?? 0, Px(150)) + Px(8), // below the toolbar so ☰ stays reachable
         };
         _windows.AddView(panel, layout);
+        Core.Overlays.Track(panel, layout, _windows);
         _list = panel;
         // Drag the list by its title, like the toolbar; it reopens where you left it.
         heading.SetOnTouchListener(new Drag(this, layout, null, end: false, window: panel));
@@ -756,6 +764,7 @@ internal sealed class DotEditor
 
     private void CloseList()
     {
+        Core.Overlays.Untrack(_list);
         if (_list is not null) _windows.RemoveView(_list);
         _list = null;
     }
@@ -838,12 +847,14 @@ internal sealed class DotEditor
         var key = Ui.Input(C, "Key", step.Key);
         var holdLabel = Ui.Text(C, "Hold it for (ms)", 13, Palette.TextQuiet);
         var hold = Ui.Number(C, "50", step.KeyHoldMs);
-        foreach (var v in new View[] { textLabel, text, keyLabel, key, holdLabel, hold }) card.AddView(v);
+        var speedLabel = Ui.Text(C, "Wait between letters (ms, 0 = all at once)", 13, Palette.TextQuiet);
+        var speed = Ui.Number(C, "30", step.TypeDelayMs);
+        foreach (var v in new View[] { textLabel, text, speedLabel, speed, keyLabel, key, holdLabel, hold }) card.AddView(v);
 
         void Mode()
         {
             var typing = type.Checked;
-            textLabel.Visibility = text.Visibility = typing ? ViewStates.Visible : ViewStates.Gone;
+            textLabel.Visibility = text.Visibility = speedLabel.Visibility = speed.Visibility = typing ? ViewStates.Visible : ViewStates.Gone;
             keyLabel.Visibility = key.Visibility = typing ? ViewStates.Gone : ViewStates.Visible;
             holdLabel.Visibility = hold.Visibility = press.Checked ? ViewStates.Visible : ViewStates.Gone;
         }
@@ -867,6 +878,7 @@ internal sealed class DotEditor
             }
             if (name is not null) step.Key = name;
             step.KeyHoldMs = Math.Clamp(Int(hold, 50), 0, MacroLimits.WaitMaxMs);
+            step.TypeDelayMs = Math.Clamp(Int(speed, 30), 0, 10_000);
             return true;
         }, step);
         ShowCard(card, step.Layout.X + Px(40), step.Layout.Y);
@@ -959,11 +971,13 @@ internal sealed class DotEditor
             SoftInputMode = SoftInput.AdjustPan | SoftInput.StateUnspecified,
         };
         _windows.AddView(scroll, layout);
+        Core.Overlays.Track(scroll, layout, _windows);
         _card = scroll;
     }
 
     private void CloseCard()
     {
+        Core.Overlays.Untrack(_card);
         if (_card is not null) _windows.RemoveView(_card);
         _card = null;
     }
@@ -1007,7 +1021,7 @@ internal sealed class DotEditor
                 case Kind.Key:
                     Add(step.KeyMode switch
                     {
-                        "type" => Block.Create(step.Id, BlockTypes.Type, new() { ["text"] = step.Text }),
+                        "type" => Block.Create(step.Id, BlockTypes.Type, new() { ["text"] = step.Text, ["delayMs"] = step.TypeDelayMs }),
                         "press" => Block.Create(step.Id, BlockTypes.Key, new() { ["key"] = step.Key, ["action"] = "press", ["holdMs"] = step.KeyHoldMs }),
                         _ => Block.Create(step.Id, BlockTypes.Key, new() { ["key"] = step.Key, ["action"] = step.KeyMode }),
                     }, step);
@@ -1202,7 +1216,11 @@ internal sealed class DotEditor
         CloseList();
         foreach (var step in _steps)
             foreach (var (view, _) in step.Windows())
+            {
+                Core.Overlays.Untrack(view);
                 if (view.IsAttachedToWindow) _windows.RemoveView(view);
+            }
+        Core.Overlays.Untrack(_toolbar);
         if (_toolbar is not null) _windows.RemoveView(_toolbar);
         _toolbar = null;
         _ = _saver.DisposeAsync().AsTask();

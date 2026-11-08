@@ -22,7 +22,7 @@ internal sealed class AccessibilityTouch : ITouchSender
     {
         var path = new Path();
         path.MoveTo(x, y);
-        return DispatchAsync(path, holdMs, ct);
+        return DispatchAsync(path, holdMs, ct, [(x, y)]);
     }
 
     public Task SwipeAsync(int fromX, int fromY, int toX, int toY, int durationMs, CancellationToken ct)
@@ -30,7 +30,7 @@ internal sealed class AccessibilityTouch : ITouchSender
         var path = new Path();
         path.MoveTo(fromX, fromY);
         path.LineTo(toX, toY);
-        return DispatchAsync(path, durationMs, ct);
+        return DispatchAsync(path, durationMs, ct, [(fromX, fromY), (toX, toY)]);
     }
 
     public void PressButton(string button)
@@ -56,7 +56,38 @@ internal sealed class AccessibilityTouch : ITouchSender
         return true;
     }
 
-    private static async Task DispatchAsync(Path path, int durationMs, CancellationToken ct)
+    private static async Task DispatchAsync(Path path, int durationMs, CancellationToken ct, (int X, int Y)[] points)
+    {
+        // The play bar or the bubble may sit over the spot: let this gesture pass through them.
+        var covered = await OnMainAsync(() => Overlays.LetThrough(points));
+        if (covered.Count == 0)
+        {
+            await SendAsync(path, durationMs, ct);
+            return;
+        }
+        try
+        {
+            await Task.Delay(80, ct); // let Android apply the window change before the touch
+            await SendAsync(path, durationMs, ct);
+        }
+        finally
+        {
+            Night.OnMain(() => Overlays.Restore(covered));
+        }
+    }
+
+    private static Task<T> OnMainAsync<T>(Func<T> work)
+    {
+        var done = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
+        Night.OnMain(() =>
+        {
+            try { done.TrySetResult(work()); }
+            catch (Exception ex) { done.TrySetException(ex); }
+        });
+        return done.Task;
+    }
+
+    private static async Task SendAsync(Path path, int durationMs, CancellationToken ct)
     {
         var duration = Math.Clamp(durationMs, 1, (int)GestureDescription.MaxGestureDuration);
         var gesture = new GestureDescription.Builder()
