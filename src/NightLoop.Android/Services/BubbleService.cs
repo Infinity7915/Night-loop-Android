@@ -170,7 +170,7 @@ public sealed class BubbleService : Service
             WindowManagerTypes.ApplicationOverlay, WindowManagerFlags.NotFocusable, Format.Translucent)
         {
             Gravity = GravityFlags.Top | GravityFlags.Start,
-            X = Math.Clamp((_bubbleLayout?.X ?? 0), Palette.Dp(this, 12), metrics.WidthPixels - width - Palette.Dp(this, 12)),
+            X = Math.Clamp(_bubbleLayout?.X ?? 0, Palette.Dp(this, 12), Math.Max(Palette.Dp(this, 12), metrics.WidthPixels - width - Palette.Dp(this, 12))),
             Y = (_bubbleLayout?.Y ?? 0) + Palette.Dp(this, 64),
         };
         _windows!.AddView(panel, layout);
