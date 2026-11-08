@@ -601,6 +601,10 @@ public sealed class MainActivity : Activity
         follow.SetTextColor(Palette.Text);
         follow.SetPadding(0, Palette.Dp(this, 8), 0, Palette.Dp(this, 8));
         follow.CheckedChange += (_, e) => LocalSettings.FollowPlayingStep = e.IsChecked;
+        var arrange = new global::Android.Widget.Switch(this) { Text = "Arrange steps automatically: the bubble lines up Wait and other step chips in columns each time. Off: each chip stays where you left it.", Checked = LocalSettings.ArrangeSteps };
+        arrange.SetTextColor(Palette.Text);
+        playing.AddView(arrange);
+        arrange.CheckedChange += (_, e) => LocalSettings.ArrangeSteps = e.IsChecked;
         playing.AddView(follow);
         var seasonal = new global::Android.Widget.Switch(this) { Text = "Seasonal themes: around holidays (Christmas week, Halloween, Valentine's and more) Night-loop's icon and bubble dress up for the season. Holidays follow your phone's region setting (for example Lunar New Year and Mid-Autumn in China, the 4th of July in the US). Your location isn't used or saved.", Checked = LocalSettings.SeasonalThemes };
         seasonal.SetTextColor(Palette.Text);

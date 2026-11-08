@@ -41,6 +41,24 @@ internal static class LocalSettings
         set => _prefs?.Edit()!.PutBoolean("hide_dots_playing", value)!.Apply();
     }
 
+    /// <summary>
+    /// Settings switch: lay the bubble's Wait / key / other step chips out in tidy columns every time a macro opens.
+    /// Off (default): each chip comes back where you last left it.
+    /// </summary>
+    public static bool ArrangeSteps
+    {
+        get => _prefs?.GetBoolean("arrange_steps", false) ?? false;
+        set => _prefs?.Edit()!.PutBoolean("arrange_steps", value)!.Apply();
+    }
+
+    /// <summary>Where a step chip was last left on screen (this phone only; chips have no screen spot in the macro).</summary>
+    public static (int X, int Y)? ChipSpot(Guid macro, string step) =>
+        _prefs?.GetString($"chip_{macro:N}_{step}", null) is { } s && s.Split(',') is [var a, var b]
+            && int.TryParse(a, out var x) && int.TryParse(b, out var y) ? (x, y) : null;
+
+    public static void SaveChipSpot(Guid macro, string step, int x, int y) =>
+        _prefs?.Edit()!.PutString($"chip_{macro:N}_{step}", $"{x},{y}")!.Apply();
+
     /// <summary>Settings switch: seasonal icons around holidays (see <see cref="Seasons"/>). Off until turned on.</summary>
     public static bool SeasonalThemes
     {
