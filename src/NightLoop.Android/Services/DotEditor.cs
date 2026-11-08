@@ -407,17 +407,15 @@ internal sealed class DotEditor
         return blocks;
     }
 
-    /// <summary>The dot's middle in screen pixels, where the tap lands.</summary>
+    /// <summary>
+    /// The dot's middle in screen pixels, where the tap lands. Dot windows are laid out in screen coordinates
+    /// (LayoutInScreen + LayoutNoLimits, into the cutout), so the window position is the screen position, even right
+    /// after a drag when the view hasn't been laid out again yet.
+    /// </summary>
     private (int X, int Y) Center(Dot dot)
     {
-        var size = Px(DotDp);
-        if (dot.View.IsAttachedToWindow && dot.View.Width > 0)
-        {
-            var at = new int[2];
-            dot.View.GetLocationOnScreen(at);
-            return (Math.Max(0, at[0] + dot.View.Width / 2), Math.Max(0, at[1] + dot.View.Height / 2));
-        }
-        return (Math.Max(0, dot.Layout.X + size / 2), Math.Max(0, dot.Layout.Y + size / 2));
+        var half = Px(DotDp) / 2;
+        return (Math.Max(0, dot.Layout.X + half), Math.Max(0, dot.Layout.Y + half));
     }
 
     private string NextId(List<Block>? building = null)
