@@ -104,7 +104,14 @@ public sealed class MainActivity : Activity
         button.Enabled = false;
         try
         {
-            await Updater.InstallAsync(this, update, percent => RunOnUiThread(() => note.Text = $"Downloading… {percent}%"));
+            var last = -1;
+            // Off the main thread: writing the 60 MB .apk on it froze Night-loop.
+            await Task.Run(() => Updater.InstallAsync(this, update, percent =>
+            {
+                if (percent == last) return;
+                last = percent;
+                RunOnUiThread(() => note.Text = $"Downloading… {percent}%");
+            }));
             RunOnUiThread(() => note.Text = "Downloaded. Confirm the update in Android's window.");
         }
         catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException or TaskCanceledException or IOException or Java.Lang.Exception)
