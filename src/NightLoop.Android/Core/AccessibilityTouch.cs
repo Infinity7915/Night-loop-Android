@@ -56,7 +56,20 @@ internal sealed class AccessibilityTouch : ITouchSender
         return true;
     }
 
+    /// <summary>
+    /// One gesture at a time across every running macro: Android cancels a gesture in progress when another one
+    /// starts, so two macros (or a hold and a tap) would break each other's touches.
+    /// </summary>
+    private static readonly SemaphoreSlim OneAtATime = new(1, 1);
+
     private static async Task DispatchAsync(Path path, int durationMs, CancellationToken ct, (int X, int Y)[] points)
+    {
+        await OneAtATime.WaitAsync(ct);
+        try { await DispatchLockedAsync(path, durationMs, ct, points); }
+        finally { OneAtATime.Release(); }
+    }
+
+    private static async Task DispatchLockedAsync(Path path, int durationMs, CancellationToken ct, (int X, int Y)[] points)
     {
         // The play bar or the bubble may sit over the spot: let this gesture pass through them.
         var covered = await OnMainAsync(() => Overlays.LetThrough(points));
@@ -109,6 +122,13 @@ internal sealed class AccessibilityTouch : ITouchSender
 
     public async Task SwipeHoldAsync(int fromX, int fromY, int toX, int toY, int durationMs, Func<Task<bool>> keepHolding, CancellationToken ct)
     {
+        await OneAtATime.WaitAsync(ct);
+        try { await SwipeHoldLockedAsync(fromX, fromY, toX, toY, durationMs, keepHolding, ct); }
+        finally { OneAtATime.Release(); }
+    }
+
+    private static async Task SwipeHoldLockedAsync(int fromX, int fromY, int toX, int toY, int durationMs, Func<Task<bool>> keepHolding, CancellationToken ct)
+    {
         var covered = await OnMainAsync(() => Overlays.LetThrough([(fromX, fromY), (toX, toY)]));
         try
         {
@@ -152,6 +172,13 @@ internal sealed class AccessibilityTouch : ITouchSender
     }
 
     public async Task SteerAsync(int x, int y, Func<Task<(int X, int Y)?>> next, CancellationToken ct)
+    {
+        await OneAtATime.WaitAsync(ct);
+        try { await SteerLockedAsync(x, y, next, ct); }
+        finally { OneAtATime.Release(); }
+    }
+
+    private static async Task SteerLockedAsync(int x, int y, Func<Task<(int X, int Y)?>> next, CancellationToken ct)
     {
         var covered = await OnMainAsync(() => Overlays.LetThrough([(x, y)]));
         var (atX, atY) = (x, y);

@@ -25,6 +25,12 @@ internal static class Dialogs
         var dialog = builder.Create()!;
         if (c is not Activity) dialog.Window?.SetType(WindowManagerTypes.ApplicationOverlay);
         dialog.Show();
+        // Over other apps, a macro's tap or swipe goes through this window too, like the bubble and play bar.
+        if (c is not Activity && dialog.Window is { DecorView: { } decor, Attributes: { } attrs, WindowManager: { } wm })
+        {
+            Core.Overlays.Track(decor, attrs, wm);
+            dialog.DismissEvent += (_, _) => Core.Overlays.Untrack(decor);
+        }
         return dialog;
     }
 }
