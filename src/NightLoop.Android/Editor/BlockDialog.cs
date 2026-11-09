@@ -78,17 +78,15 @@ internal static class BlockDialog
                 });
                 break;
             }
-            case SecondsField f:
+            case TimeoutField f:
             {
+                // Milliseconds, like the PC app. Blank stores 0 (Infinite) when the field allows it.
                 var stored = copy.GetInt(f.Key);
-                var input = Ui.Input(a, f.Hint, stored is > 0 ? (stored.Value / 1000.0).ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) : "",
-                    InputTypes.ClassNumber | InputTypes.NumberFlagDecimal);
+                var input = Ui.Input(a, f.Hint, stored is > 0 ? stored.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) : "", InputTypes.ClassNumber);
                 body.AddView(input);
                 apply.Add(() =>
                 {
-                    var text = (input.Text ?? "").Trim().Replace(',', '.');
-                    if (double.TryParse(text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var sec) && sec >= 0)
-                        p[f.Key] = (int)Math.Min(MacroLimits.WaitMaxMs, Math.Round(sec * 1000));
+                    if (int.TryParse((input.Text ?? "").Trim(), out var ms) && ms >= 0) p[f.Key] = Math.Min(MacroLimits.WaitMaxMs, ms);
                     else if (f.BlankIsInfinite) p[f.Key] = 0;
                     else p.Remove(f.Key);
                 });
