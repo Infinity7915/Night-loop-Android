@@ -19,7 +19,7 @@ namespace NightLoop.Mobile;
 /// Makes a macro right on top of the game, as numbered steps that play in order. It does everything the app's
 /// editor does:
 /// <list type="bullet">
-/// <item>a dot (+): drag it where the tap lands; tap it for Click or Hold, how long, and the wait before the next step;</item>
+/// <item>a dot (+): drag it where the tap lands; hold it for Click or Hold, how long, and the wait before the next step;</item>
 /// <item>a swipe: two dots, start and end, both draggable;</item>
 /// <item>a wait (⏱) and a key step (⌨);</item>
 /// <item>every other block (⊕): phone buttons, apps, If / Loop / Repeat until, labels, notify, run macro…, as chips.</item>
@@ -488,9 +488,9 @@ internal sealed class DotEditor
         Changed();
         Ui.Toast(C, block.Type switch
         {
-            BlockTypes.SwipeHold => "Drag the dots: green ▶ is where the swipe starts, red ✋ is where it ends and keeps holding. Tap a dot to set how long to hold or what to wait for.",
-            BlockTypes.SwipeScan => "Drag the dots: green ▶ is where the swipe starts, red 🔍 where it ends. Tap a dot to pick what to look for.",
-            BlockTypes.WalkTo => "Put green ▶ on the middle of the joystick and red 🚶 where you push it to walk forward. Tap a dot to pick the picture to walk to.",
+            BlockTypes.SwipeHold => "Drag the dots: green ▶ is where the swipe starts, red ✋ is where it ends and keeps holding. Hold a dot to set how long to hold or what to wait for.",
+            BlockTypes.SwipeScan => "Drag the dots: green ▶ is where the swipe starts, red 🔍 where it ends. Hold a dot to pick what to look for.",
+            BlockTypes.WalkTo => "Put green ▶ on the middle of the joystick and red 🚶 where you push it to walk forward. Hold a dot to pick the picture to walk to.",
             _ => "Drag the dots: green ▶ is where the swipe starts, red ■ is where it ends.",
         });
     }
@@ -651,6 +651,16 @@ internal sealed class DotEditor
         }
     }
 
+    /// <summary>A tap: highlight the step (new steps go after it, ↑ ↓ move it) without opening its settings.</summary>
+    private void Highlight(Step step)
+    {
+        if (_isPlaying) return;
+        CloseCard();
+        _selected = step;
+        PaintAll();
+    }
+
+    /// <summary>Holding a step: highlight it and open its settings.</summary>
     private void Select(Step step)
     {
         if (_isPlaying) return;
@@ -1314,7 +1324,8 @@ internal sealed class DotEditor
     {
         private float _downX, _downY;
         private int _startX, _startY;
-        private bool _moved;
+        private bool _moved, _opened;
+        private Java.Lang.IRunnable? _hold;
 
         public bool OnTouch(View? v, MotionEvent? e)
         {
@@ -1323,11 +1334,27 @@ internal sealed class DotEditor
             switch (e.Action)
             {
                 case MotionEventActions.Down:
-                    (_downX, _downY, _startX, _startY, _moved) = (e.RawX, e.RawY, layout.X, layout.Y, false);
+                    (_downX, _downY, _startX, _startY, _moved, _opened) = (e.RawX, e.RawY, layout.X, layout.Y, false, false);
+                    // Holding a step still opens its settings; a quick tap only highlights it.
+                    if (step is not null && window is null)
+                    {
+                        _hold = new Java.Lang.Runnable(() =>
+                        {
+                            if (_moved) return;
+                            _opened = true;
+                            target?.PerformHapticFeedback(FeedbackConstants.LongPress);
+                            editor.Select(step);
+                        });
+                        v.PostDelayed(_hold, ViewConfiguration.LongPressTimeout);
+                    }
                     return true;
                 case MotionEventActions.Move:
                     var (dx, dy) = (e.RawX - _downX, e.RawY - _downY);
-                    if (Math.Abs(dx) > 10 || Math.Abs(dy) > 10) _moved = true;
+                    if (!_moved && (Math.Abs(dx) > 10 || Math.Abs(dy) > 10))
+                    {
+                        _moved = true;
+                        if (_hold is not null) v.RemoveCallbacks(_hold);
+                    }
                     if (_moved && target is not null)
                     {
                         layout.X = _startX + (int)dx;
@@ -1335,7 +1362,11 @@ internal sealed class DotEditor
                         editor._windows.UpdateViewLayout(target, layout);
                     }
                     return true;
+                case MotionEventActions.Cancel:
+                    if (_hold is not null) v.RemoveCallbacks(_hold);
+                    return true;
                 case MotionEventActions.Up:
+                    if (_hold is not null) v.RemoveCallbacks(_hold);
                     if (window is not null) (editor._listX, editor._listY) = (layout.X, layout.Y);
                     if (step is null) return true;
                     if (_moved)
@@ -1344,7 +1375,7 @@ internal sealed class DotEditor
                         // A chip's place isn't part of the macro: keep it on this phone so it comes back there.
                         else if (step.Id is { Length: > 0 } id) Core.LocalSettings.SaveChipSpot(editor._id, id, layout.X, layout.Y);
                     }
-                    else editor.Select(step);
+                    else if (!_opened) editor.Highlight(step);
                     return true;
             }
             return false;
