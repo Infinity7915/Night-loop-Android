@@ -323,17 +323,16 @@ internal sealed class DotEditor
     }
 
     /// <summary>
-    /// The n-th chip's tidy spot: columns down the left side. Columns that wouldn't fit across the screen start over
-    /// from the left a little lower, so every chip stays on screen (past ~30 steps they used to land off the edge).
+    /// The n-th chip's tidy spot: columns down the left side, then across. When the screen has no room for another
+    /// column, the next chips stack on top of the ones already there, starting again from the first spot.
     /// </summary>
     private (int X, int Y) ChipSlot(int n)
     {
         var metrics = C.Resources!.DisplayMetrics!;
         var perColumn = Math.Max(4, (metrics.HeightPixels - Px(230)) / Px(44));
         var columns = Math.Max(1, (metrics.WidthPixels - Px(16)) / Px(170));
-        var column = n / perColumn;
-        var layer = column / columns; // a full screen of columns: start a new layer, nudged down and right
-        return (Px(8) + column % columns * Px(170) + layer * Px(14), Px(150) + n % perColumn * Px(44) + layer * Px(22));
+        var slot = n % (perColumn * columns);
+        return (Px(8) + slot / perColumn * Px(170), Px(150) + slot % perColumn * Px(44));
     }
 
     private (int X, int Y) ClampToScreen((int X, int Y) p)
