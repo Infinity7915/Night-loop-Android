@@ -55,13 +55,14 @@ internal static class BlockKinds
     private static readonly (string, string)[] WhenFound = [("none", "Just go on"), ("tap", "Tap it, then go on")];
     private static Field[] Tapping(Field[] fields) => [.. fields, new ChoiceField("whenFound", "When found", WhenFound), new TapSpotField()];
 
-    private static BoolField AverageColors => new(BlockTypes.AverageColorsKey, "Also match dimmer or brighter copies (with Match colors)", false);
+    // Replaced the "dimmer or brighter" switch; a block that had it on shows 50 (see Brightness).
+    private static IntField BrightnessRange => new(BlockTypes.BrightnessKey, "Brightness range % (how much dimmer or brighter it may look, with Match colors)", $"{Brightness.DefaultPct}");
 
     private static Field[] PictureFields =>
     [
         new PictureField(), new IntField("confidencePct", "Confidence % (1–100)", "90"),
         new IntField("sizeTolerancePct", "Size tolerance % (blank = automatic)", "auto"),
-        new BoolField("matchColor", "Match colors", true), AverageColors,
+        new BoolField("matchColor", "Match colors", true), BrightnessRange,
         new TimeoutField("timeoutMs", "Give up after (ms, blank = Infinite)"),
         new ChoiceField("onFail", "If it gives up", OnFails), new TextField("failLabel", "Label to go to (for Go to a label)"),
     ];
@@ -97,7 +98,7 @@ internal static class BlockKinds
                           ["target"] = "image", ["confidencePct"] = 90, ["maxTurns"] = 12, ["whenFound"] = "none" },
             [new SpotField("from", "Swipe start"), new SpotField("to", "Swipe end"), new IntField("durationMs", "Swipe time (ms)", "300"),
              new ChoiceField("target", "Look for", Targets), new PictureField(), new TextField("value", "Text to look for (when looking for text)"),
-             new IntField("confidencePct", "Confidence % (1–100)", "90"), new BoolField("matchColor", "Match colors", true), AverageColors,
+             new IntField("confidencePct", "Confidence % (1–100)", "90"), new BoolField("matchColor", "Match colors", true), BrightnessRange,
              new IntField("maxTurns", "Most swipes before giving up", "12"),
              new ChoiceField("whenFound", "When found", WhenFound), new TapSpotField(),
              new ChoiceField("onFail", "If it gives up", OnFails), new TextField("failLabel", "Label to go to (for Go to a label)")],
@@ -107,7 +108,7 @@ internal static class BlockKinds
                           ["target"] = "image", ["confidencePct"] = 90, ["tolerancePx"] = 200, ["timeoutMs"] = 30_000, ["whenFound"] = "none" },
             [new SpotField("from", "Joystick middle"), new SpotField("to", "Joystick pushed forward"),
              new ChoiceField("target", "Walk to", Targets), new PictureField(), new TextField("value", "Text to walk to (when walking to text)"),
-             new IntField("confidencePct", "Confidence % (1–100)", "90"), new BoolField("matchColor", "Match colors", true), AverageColors,
+             new IntField("confidencePct", "Confidence % (1–100)", "90"), new BoolField("matchColor", "Match colors", true), BrightnessRange,
              new IntField("tolerancePx", "Arrived when it's this close to the middle of the screen (px)", "200"),
              new ConditionField(Optional: true, Title: "Or stop walking when"),
              new TimeoutField("timeoutMs", "Give up after (ms, blank = Infinite)"),
