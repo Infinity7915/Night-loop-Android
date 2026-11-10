@@ -546,7 +546,7 @@ internal sealed class DotEditor
     {
         CloseCard();
         CloseList();
-        var kinds = BlockKinds.All.Where(k => k.Type != BlockTypes.End).ToArray(); // End comes with If, Loop and Repeat until
+        var kinds = BlockKinds.Addable.ToArray();
         var names = kinds.Select(k => $"{k.Group} · {k.Name}").ToArray();
         Dialogs.Show(C, Dialogs.Builder(C).SetTitle(_selected is null ? "Add a step at the end" : $"Add a step after {_steps.IndexOf(_selected) + 1}")!
             .SetItems(names, (_, e) => Add(kinds[e.Which]))!

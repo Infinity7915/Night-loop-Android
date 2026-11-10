@@ -380,7 +380,7 @@ public sealed class EditorActivity : Activity
 
     private void AddBlock(int? at)
     {
-        var kinds = BlockKinds.All.Where(k => k.Type != BlockTypes.End).ToArray(); // End comes with If, Loop and Repeat until
+        var kinds = BlockKinds.Addable.ToArray();
         var names = kinds.Select(k => $"{k.Group} · {k.Name}").ToArray();
         Dialogs.Builder(this).SetTitle("Add block")!.SetItems(names, (_, e) =>
         {

@@ -197,6 +197,12 @@ internal static class BlockKinds
             b => b.GetString("text", "") is { Length: > 0 } t ? t : "Description"),
     ];
 
+    /// <summary>
+    /// What the Add block list offers. Walk to picture was taken out of the list (Cryo's call); macros that already
+    /// have one still show, edit and play it.
+    /// </summary>
+    public static IEnumerable<BlockKind> Addable => All.Where(k => k.Type is not (BlockTypes.End or BlockTypes.WalkTo)); // End comes with If, Loop and Repeat until
+
     public static BlockKind? For(string type) => All.FirstOrDefault(k => k.Type == type);
 
     /// <summary>Installed apps' names by package, filled by the app picker; packages are shown until then.</summary>

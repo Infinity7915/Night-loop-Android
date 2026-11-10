@@ -533,8 +533,8 @@ internal static class BlockDialog
         {
             try
             {
-                var image = Shrink(Core.ScreenCapture.Instance.Capture(r.Left, r.Top, r.Width, r.Height));
-                got(NightLoop.Engine.Screen.ImageTemplate.FromImage(image).Encode());
+                var (image, scale) = Shrink(Core.ScreenCapture.Instance.Capture(r.Left, r.Top, r.Width, r.Height));
+                got(NightLoop.Engine.Screen.ImageTemplate.FromImage(image, scale).Encode());
             }
             catch (Exception ex)
             {
@@ -544,23 +544,17 @@ internal static class BlockDialog
         }));
     }
 
-    /// <summary>Pictures are at most 200 px a side; bigger boxes are scaled down (size tolerance finds them again).</summary>
-    private static NightLoop.Engine.Screen.ScreenImage Shrink(NightLoop.Engine.Screen.ScreenImage image)
+    /// <summary>
+    /// Pictures are at most 200 px a side; bigger boxes are scaled down the same way the matcher scales the screen,
+    /// and the picture remembers by how much so it's looked for at the size it really is on screen.
+    /// </summary>
+    private static (NightLoop.Engine.Screen.ScreenImage Image, double Scale) Shrink(NightLoop.Engine.Screen.ScreenImage image)
     {
         var max = NightLoop.Engine.Screen.ImageTemplate.MaxSide;
-        if (image.Width <= max && image.Height <= max) return image;
-        var scale = Math.Min((double)max / image.Width, (double)max / image.Height);
-        var w = Math.Max(1, (int)(image.Width * scale));
-        var h = Math.Max(1, (int)(image.Height * scale));
-        var px = new byte[w * h * 4];
-        for (var y = 0; y < h; y++)
-        for (var x = 0; x < w; x++)
-        {
-            var sx = Math.Min(image.Width - 1, (int)(x / scale));
-            var sy = Math.Min(image.Height - 1, (int)(y / scale));
-            Array.Copy(image.Bgra, (sy * image.Width + sx) * 4, px, (y * w + x) * 4, 4);
-        }
-        return new NightLoop.Engine.Screen.ScreenImage(image.Left, image.Top, w, h, px);
+        if (image.Width <= max && image.Height <= max) return (image, 1);
+        var by = Math.Max((double)image.Width / max, (double)image.Height / max);
+        var small = NightLoop.Engine.Screen.TemplateMatcher.Shrunk(image, by);
+        return (small, (double)image.Width / small.Width);
     }
 
     /// <summary>
