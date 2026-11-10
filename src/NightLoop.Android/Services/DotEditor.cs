@@ -1125,7 +1125,7 @@ internal sealed class DotEditor
         if (save)
         {
             _saver.Changed(_doc);
-            if (!Core.LocalSettings.ArrangeSteps) foreach (var step in _steps) SaveChipSpot(step);
+            if (!Core.LocalSettings.ArrangeSteps) foreach (var s in _steps) SaveChipSpot(s);
         }
         PaintAll();
     }
