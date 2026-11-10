@@ -344,8 +344,10 @@ internal sealed class DotEditor
 
     private (int X, int Y) ClampToScreen((int X, int Y) p)
     {
+        // The screen may have turned since the spot was saved (games run sideways), so allow the long side either way.
         var metrics = C.Resources!.DisplayMetrics!;
-        return (Math.Clamp(p.X, 0, Math.Max(0, metrics.WidthPixels - Px(60))), Math.Clamp(p.Y, 0, Math.Max(0, metrics.HeightPixels - Px(40))));
+        var side = Math.Max(metrics.WidthPixels, metrics.HeightPixels);
+        return (Math.Clamp(p.X, 0, Math.Max(0, side - Px(60))), Math.Clamp(p.Y, 0, Math.Max(0, side - Px(40))));
     }
 
     private (TextView, WindowManagerLayoutParams) MakeWindow(Step step, int width, int height, int x, int y, bool end)
@@ -1098,6 +1100,21 @@ internal sealed class DotEditor
 
     // ---- Saving ----
 
+    /// <summary>A dragged dot changes the macro; a dragged chip's place is kept on this phone.</summary>
+    private void Moved(Step step)
+    {
+        if (step.Kind is Kind.Touch or Kind.Swipe) Changed();
+        else SaveChipSpot(step);
+    }
+
+    /// <summary>A chip's place isn't part of the macro: keep it on this phone so it comes back there.</summary>
+    private void SaveChipSpot(Step step)
+    {
+        if (step.Kind is Kind.Touch or Kind.Swipe || step.Id is not { Length: > 0 } id || step.Layout is null) return;
+        if (Core.LocalSettings.ChipSpot(_id, id) is { } old && old == (step.Layout.X, step.Layout.Y)) return;
+        Core.LocalSettings.SaveChipSpot(_id, id, step.Layout.X, step.Layout.Y);
+    }
+
     private void Changed(bool save = true)
     {
         _doc.Blocks = ToBlocks();
@@ -1105,7 +1122,11 @@ internal sealed class DotEditor
         _issue = issues.Count == 0 ? null
             : issues[0].BlockId is { } id && _byBlockId.TryGetValue(id, out var step) ? $"Step {_steps.IndexOf(step) + 1}: {issues[0].Message}"
             : issues[0].Message;
-        if (save) _saver.Changed(_doc);
+        if (save)
+        {
+            _saver.Changed(_doc);
+            if (!Core.LocalSettings.ArrangeSteps) foreach (var step in _steps) SaveChipSpot(step);
+        }
         PaintAll();
     }
 
@@ -1375,6 +1396,7 @@ internal sealed class DotEditor
         if (_closed) return;
         _closed = true;
         Night.RunsChanged -= OnRunsChanged;
+        if (!Core.LocalSettings.ArrangeSteps) foreach (var step in _steps) SaveChipSpot(step);
         CloseCard();
         CloseList();
         foreach (var step in _steps)
@@ -1431,21 +1453,21 @@ internal sealed class DotEditor
                         layout.X = _startX + (int)dx;
                         layout.Y = _startY + (int)dy;
                         editor._windows.UpdateViewLayout(target, layout);
+                        // Chips keep their spot as they go, so it's kept even if the drag never gets its Up.
+                        if (step is not null && window is null && !end) editor.SaveChipSpot(step);
                     }
                     return true;
                 case MotionEventActions.Cancel:
+                    // Android can end a drag with Cancel instead of Up (a window was added or changed meanwhile):
+                    // keep the new spot anyway.
                     if (_hold is not null) v.RemoveCallbacks(_hold);
+                    if (step is not null && _moved) editor.Moved(step);
                     return true;
                 case MotionEventActions.Up:
                     if (_hold is not null) v.RemoveCallbacks(_hold);
                     if (window is not null) (editor._listX, editor._listY) = (layout.X, layout.Y);
                     if (step is null) return true;
-                    if (_moved)
-                    {
-                        if (step.Kind is Kind.Touch or Kind.Swipe) editor.Changed();
-                        // A chip's place isn't part of the macro: keep it on this phone so it comes back there.
-                        else if (step.Id is { Length: > 0 } id) Core.LocalSettings.SaveChipSpot(editor._id, id, layout.X, layout.Y);
-                    }
+                    if (_moved) editor.Moved(step);
                     // A quick tap highlights the step; a second quick tap on it opens its settings.
                     else if (!_opened)
                     {

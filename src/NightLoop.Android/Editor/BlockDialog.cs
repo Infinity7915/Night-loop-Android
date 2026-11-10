@@ -71,10 +71,17 @@ internal static class BlockDialog
             {
                 // "Max tries" and the like take the word Infinite too.
                 var infinite = f.Hint == "Infinite";
-                var input = infinite ? Ui.NumberOrInfinite(a, f.Hint, copy.GetInt(f.Key)) : Ui.Number(a, f.Hint, copy.GetInt(f.Key));
+                var brightness = f.Key == BlockTypes.BrightnessKey;
+                var shown = brightness ? (int.TryParse(Brightness.Shown(p), out var bp) ? bp : (int?)null) : copy.GetInt(f.Key);
+                var input = infinite ? Ui.NumberOrInfinite(a, f.Hint, shown) : Ui.Number(a, f.Hint, shown);
                 body.AddView(input);
                 apply.Add(() =>
                 {
+                    if (brightness)
+                    {
+                        Brightness.Write(p, int.TryParse((input.Text ?? "").Trim(), out var b) ? b : null);
+                        return;
+                    }
                     if (int.TryParse((input.Text ?? "").Trim(), out var v)) p[f.Key] = v;
                     else if (!f.Required) p.Remove(f.Key);
                 });
@@ -383,8 +390,7 @@ internal static class BlockDialog
                     var size = Ui.Number(a, "Size tolerance % (blank = automatic)", (inner["sizeTolerancePct"] as JsonValue)?.TryGetValue(out int sp) == true ? sp : null);
                     var color = new CheckBox(a) { Text = "Match colors", Checked = !((inner["matchColor"] as JsonValue)?.TryGetValue(out bool mc) == true && !mc) };
                     color.SetTextColor(Palette.Text);
-                    var dimmer = new CheckBox(a) { Text = "Also match dimmer or brighter copies", Checked = (inner[BlockTypes.AverageColorsKey] as JsonValue)?.TryGetValue(out bool av) == true && av };
-                    dimmer.SetTextColor(Palette.Text);
+                    var dimmer = Ui.Number(a, $"Brightness range % ({Brightness.DefaultPct})", int.TryParse(Brightness.Shown(inner), out var bp) ? bp : null);
                     details.AddView(conf);
                     details.AddView(size);
                     details.AddView(color);
@@ -396,7 +402,7 @@ internal static class BlockDialog
                         if (int.TryParse(conf.Text, out var cv)) o["confidencePct"] = cv;
                         if (int.TryParse(size.Text, out var sv)) o["sizeTolerancePct"] = sv;
                         if (!color.Checked) o["matchColor"] = false;
-                        if (dimmer.Checked) o[BlockTypes.AverageColorsKey] = true;
+                        Brightness.Write(o, int.TryParse((dimmer.Text ?? "").Trim(), out var bv) ? bv : null);
                         return o;
                     };
                     details.AddView(Ui.Button(a, "Pick picture on screen", () =>
