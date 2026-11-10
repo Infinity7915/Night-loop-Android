@@ -36,6 +36,12 @@ internal sealed class DotEditor
     private const string AfterPrefix = "after-";
     /// <summary>Android lets taps through an app's overlay only when it is at most 80% opaque.</summary>
     private const float PlayingAlpha = 0.55f;
+    /// <summary>
+    /// Android 12+ drops a tap that passes through another app's see-through windows when together they are more
+    /// than 80% opaque. Three dots at 0.55 on one spot came to 0.91, so taps there hit nothing. Stacked dots are
+    /// made fainter so any pile stays under this.
+    /// </summary>
+    private const double MaxStackOpacity = 0.75;
 
     private enum Kind { Touch, Swipe, Wait, Key, Other }
 
@@ -316,10 +322,11 @@ internal sealed class DotEditor
         }
         foreach (var (view, layout) in step.Windows())
         {
-            if (_isPlaying) PassThrough(view, layout, true);
+            if (_isPlaying) PassThrough(view, layout, true, Core.LocalSettings.HideDotsWhilePlaying);
             _windows.AddView(view, layout);
             Core.Overlays.Track(view, layout, _windows); // a tap under this dot goes to the app, not the dot
         }
+        if (_isPlaying) FitStackedAlphas();
     }
 
     /// <summary>
@@ -1258,7 +1265,37 @@ internal sealed class DotEditor
         if (_toolbar is not null && _toolbarLayout is not null)
             PassThrough(_toolbar, _toolbarLayout, playing && LocalSettings.HidePlayBarWhilePlaying, hide: true);
         if (_playButton is not null) _playButton.Text = playing ? "■" : "▶";
+        if (playing) FitStackedAlphas();
         PaintAll();
+    }
+
+    /// <summary>
+    /// While playing, makes each see-through step window faint enough that however many lie on one spot, taps still
+    /// go through to the game. A window overlapping k windows (itself included) gets 1 - (1 - max)^(1/k), so any
+    /// pile of m windows (each overlapping at least m) adds up to at most <see cref="MaxStackOpacity"/>.
+    /// </summary>
+    private void FitStackedAlphas()
+    {
+        var shown = _steps.SelectMany(s => s.Windows())
+            .Where(w => (w.Layout.Flags & WindowManagerFlags.NotTouchable) != 0 && w.Layout.Alpha > 0)
+            .Select(w => (w.View, w.Layout, Rect: ScreenRect(w.View, w.Layout)))
+            .ToList();
+        foreach (var (view, layout, rect) in shown)
+        {
+            var k = shown.Count(o => Rect.Intersects(rect, o.Rect));
+            var alpha = (float)Math.Min(PlayingAlpha, 1 - Math.Pow(1 - MaxStackOpacity, 1.0 / Math.Max(1, k)));
+            if (Math.Abs(layout.Alpha - alpha) < 0.001f) continue;
+            layout.Alpha = alpha;
+            if (view.IsAttachedToWindow) _windows.UpdateViewLayout(view, layout);
+        }
+    }
+
+    /// <summary>Where a step window is on screen. A chip not measured yet counts at its widest.</summary>
+    private Rect ScreenRect(View view, WindowManagerLayoutParams layout)
+    {
+        var w = layout.Width > 0 ? layout.Width : view.Width > 0 ? view.Width : Px(240);
+        var h = layout.Height > 0 ? layout.Height : view.Height > 0 ? view.Height : Px(36);
+        return new Rect(layout.X, layout.Y, layout.X + w, layout.Y + h);
     }
 
     /// <summary>While playing, steps stay visible but see-through and untouchable, so the taps reach the game.</summary>
