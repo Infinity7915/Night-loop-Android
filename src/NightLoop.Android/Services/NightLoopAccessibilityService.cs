@@ -33,7 +33,27 @@ public sealed class NightLoopAccessibilityService : AccessibilityService
         if (e?.EventType != EventTypes.WindowStateChanged || e.PackageName is not { } package) return;
         // Night-loop's own bubble, panel and pickers aren't "the app in front"; its screens are.
         if (package == PackageName && e.ClassName?.StartsWith("win.nightloop.app.", StringComparison.Ordinal) != true) return;
+        // The keyboard and the status bar / notification shade report as windows too, but the app stays in front
+        // under them. Counting them made "If Roblox is not open" true right after typing, and Open app then waited
+        // for Roblox to come to the front while it already was.
+        if (IsOverlay(package, e.ClassName)) return;
         ForegroundPackage = package;
+    }
+
+    private bool IsOverlay(string package, string? className)
+    {
+        if (package is "com.android.systemui" or "android") return true;
+        if (className is not null && (className.Contains("SoftInputWindow", StringComparison.Ordinal) || className.Contains("InputMethod", StringComparison.Ordinal)))
+            return true;
+        try
+        {
+            var ime = Android.Provider.Settings.Secure.GetString(ContentResolver, Android.Provider.Settings.Secure.DefaultInputMethod);
+            return ime is { Length: > 0 } && ime.Split('/')[0] == package;
+        }
+        catch (Java.Lang.Exception)
+        {
+            return false;
+        }
     }
 
     public override void OnInterrupt() { }
