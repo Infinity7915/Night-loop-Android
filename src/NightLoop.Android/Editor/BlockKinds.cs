@@ -147,17 +147,17 @@ internal static class BlockKinds
             b => $"Wait {b.GetInt("minMs", 0)}–{b.GetInt("maxMs", 0)} ms"),
 
         new(BlockTypes.WaitForText, "Wait for text", "Screen", () => new() { ["text"] = "", ["match"] = "contains", ["timeoutMs"] = 0 },
-            Tapping(TextFields), b => $"Wait for \"{b.GetString("text", "")}\"{Tap(b)}"),
+            Tapping(TextFields), b => $"Wait for \"{b.GetString("text", "")}\"{Tap(b)}{GivesUp(b)}"),
         new(BlockTypes.WaitForTextGone, "Wait until text is gone", "Screen", () => new() { ["text"] = "", ["match"] = "contains", ["timeoutMs"] = 0 },
-            TextFields, b => $"Wait until \"{b.GetString("text", "")}\" is gone"),
+            TextFields, b => $"Wait until \"{b.GetString("text", "")}\" is gone{GivesUp(b)}"),
         new(BlockTypes.WaitForImage, "Wait for picture", "Screen", () => new() { ["confidencePct"] = 90, ["timeoutMs"] = 0 },
-            Tapping(PictureFields), b => b.GetString("imageData") is { Length: > 0 } ? $"Wait for picture · {b.GetInt("confidencePct", 90)}%{Tap(b)}" : "Wait for picture (none yet)"),
+            Tapping(PictureFields), b => b.GetString("imageData") is { Length: > 0 } ? $"Wait for picture · {b.GetInt("confidencePct", 90)}%{Tap(b)}{GivesUp(b)}" : "Wait for picture (none yet)"),
         new(BlockTypes.WaitForImageGone, "Wait until picture is gone", "Screen", () => new() { ["confidencePct"] = 90, ["timeoutMs"] = 0 },
-            PictureFields, b => b.GetString("imageData") is { Length: > 0 } ? "Wait until picture is gone" : "Wait until picture is gone (none yet)"),
+            PictureFields, b => b.GetString("imageData") is { Length: > 0 } ? $"Wait until picture is gone{GivesUp(b)}" : "Wait until picture is gone (none yet)"),
         new(BlockTypes.DetectPixelColor, "Wait for color", "Screen", () => new() { ["x"] = 540, ["y"] = 1200, ["color"] = "#FFFFFF", ["tolerance"] = 10, ["timeoutMs"] = 0 },
-            Tapping(PixelFields), b => $"Wait for {b.GetString("color", "")} at {b.GetInt("x", 0)}, {b.GetInt("y", 0)}{Tap(b)}"),
+            Tapping(PixelFields), b => $"Wait for {b.GetString("color", "")} at {b.GetInt("x", 0)}, {b.GetInt("y", 0)}{Tap(b)}{GivesUp(b, 5000)}"),
         new(BlockTypes.DetectPixelColorGone, "Wait until color is gone", "Screen", () => new() { ["x"] = 540, ["y"] = 1200, ["color"] = "#FFFFFF", ["tolerance"] = 10, ["timeoutMs"] = 0 },
-            PixelFields, b => $"Wait until {b.GetInt("x", 0)}, {b.GetInt("y", 0)} isn't {b.GetString("color", "")}"),
+            PixelFields, b => $"Wait until {b.GetInt("x", 0)}, {b.GetInt("y", 0)} isn't {b.GetString("color", "")}{GivesUp(b, 5000)}"),
 
         new(BlockTypes.Loop, "Loop", "Logic", () => new() { ["count"] = 5 }, [new LoopCountField()],
             b => b.GetBool("forever") == true ? "Loop forever" : $"Loop {b.GetInt("count", 1)} times"),
@@ -198,6 +198,13 @@ internal static class BlockKinds
 
     public static string AppName(string? package) =>
         string.IsNullOrEmpty(package) ? "(pick an app)" : AppNames.TryGetValue(package, out var name) ? name : package;
+
+    /// <summary>
+    /// " · gives up after 10 s" when the wait isn't Infinite, so a wait that stops early shows it on its step.
+    /// <paramref name="fallbackMs"/> is what the engine uses when the block has no timeout saved.
+    /// </summary>
+    private static string GivesUp(Block b, int fallbackMs = 10_000) =>
+        b.GetInt("timeoutMs", fallbackMs) is > 0 and var ms ? $" · gives up after {ms / 1000.0:0.#} s" : "";
 
     private static string Tap(Block b) => b.GetString("whenFound", "none") is "tap" or "click" ? " · tap it" : "";
     private static string Looking(Block b) => b.GetString("target", "image") == "text"

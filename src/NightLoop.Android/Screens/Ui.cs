@@ -201,6 +201,21 @@ internal static class Ui
     public static EditText Number(Context c, string hint, int? value) =>
         Input(c, hint, value?.ToString() ?? "", InputTypes.ClassNumber);
 
+    /// <summary>
+    /// A number box that also takes the word Infinite (any case, or just "inf"), so it opens the full keyboard.
+    /// Blank counts as Infinite too; see <see cref="SaysInfinite"/>.
+    /// </summary>
+    public static EditText NumberOrInfinite(Context c, string hint, int? value) =>
+        Input(c, hint, value?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "",
+            InputTypes.ClassText | InputTypes.TextFlagNoSuggestions);
+
+    /// <summary>True for a blank box or one that says Infinite (or starts with "inf", or ∞).</summary>
+    public static bool SaysInfinite(string? text)
+    {
+        var t = (text ?? "").Trim();
+        return t.Length == 0 || t == "∞" || t.StartsWith("inf", StringComparison.OrdinalIgnoreCase);
+    }
+
     public static View Fill(View view)
     {
         view.LayoutParameters = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WrapContent, 1);

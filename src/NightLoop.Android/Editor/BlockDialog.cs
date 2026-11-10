@@ -69,11 +69,13 @@ internal static class BlockDialog
         {
             case IntField f:
             {
-                var input = Ui.Number(a, f.Hint, copy.GetInt(f.Key));
+                // "Max tries" and the like take the word Infinite too.
+                var infinite = f.Hint == "Infinite";
+                var input = infinite ? Ui.NumberOrInfinite(a, f.Hint, copy.GetInt(f.Key)) : Ui.Number(a, f.Hint, copy.GetInt(f.Key));
                 body.AddView(input);
                 apply.Add(() =>
                 {
-                    if (int.TryParse(input.Text, out var v)) p[f.Key] = v;
+                    if (int.TryParse((input.Text ?? "").Trim(), out var v)) p[f.Key] = v;
                     else if (!f.Required) p.Remove(f.Key);
                 });
                 break;
@@ -82,23 +84,25 @@ internal static class BlockDialog
             {
                 // Milliseconds, like the PC app. Blank stores 0 (Infinite) when the field allows it.
                 var stored = copy.GetInt(f.Key);
-                var input = Ui.Input(a, f.Hint, stored is > 0 ? stored.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) : "", InputTypes.ClassNumber);
+                // Typing the word Infinite works as well as leaving it blank.
+                var input = Ui.NumberOrInfinite(a, f.Hint, stored is > 0 ? stored : null);
                 body.AddView(input);
                 apply.Add(() =>
                 {
-                    if (int.TryParse((input.Text ?? "").Trim(), out var ms) && ms >= 0) p[f.Key] = Math.Min(MacroLimits.WaitMaxMs, ms);
-                    else if (f.BlankIsInfinite) p[f.Key] = 0;
+                    var text = (input.Text ?? "").Trim();
+                    if (int.TryParse(text, out var ms) && ms >= 0) p[f.Key] = Math.Min(MacroLimits.WaitMaxMs, ms);
+                    else if (f.BlankIsInfinite || (text.Length > 0 && Ui.SaysInfinite(text))) p[f.Key] = 0;
                     else p.Remove(f.Key);
                 });
                 break;
             }
             case LoopCountField:
             {
-                var input = Ui.Number(a, "Infinite", copy.GetBool("forever") == true ? null : copy.GetInt("count"));
+                var input = Ui.NumberOrInfinite(a, "Infinite", copy.GetBool("forever") == true ? null : copy.GetInt("count"));
                 body.AddView(input);
                 apply.Add(() =>
                 {
-                    if (int.TryParse(input.Text, out var v) && v > 0)
+                    if (int.TryParse((input.Text ?? "").Trim(), out var v) && v > 0)
                     {
                         p["count"] = v;
                         p.Remove("forever");
