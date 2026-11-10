@@ -23,6 +23,11 @@ internal sealed class ScreenCapture : IScreenCapture
     private VirtualDisplay? _display;
     private ImageReader? _reader;
     private byte[]? _frame;
+    // The newest picture Android sent, kept until the next look turns it into _frame. Taking every picture as it
+    // arrives matters: when nobody takes them, Android's queue fills up and stops, and the next look got a picture
+    // from minutes ago (a macro "found" a picture that was on screen while it was being set up, not the one now).
+    private global::Android.Media.Image? _latest;
+    private global::Android.OS.HandlerThread? _thread;
     private byte[]? _raw;
     private int _width, _height;
 
@@ -45,7 +50,11 @@ internal sealed class ScreenCapture : IScreenCapture
             projection.RegisterCallback(new Ended(projection), new global::Android.OS.Handler(global::Android.OS.Looper.MainLooper!));
             var metrics = context.Resources!.DisplayMetrics!;
             var (w0, h0) = RealSize(context);
-            reader = ImageReader.NewInstance(w0, h0, (ImageFormatType)1 /* RGBA_8888 */, 2);
+            reader = ImageReader.NewInstance(w0, h0, (ImageFormatType)1 /* RGBA_8888 */, 3);
+            var thread = new global::Android.OS.HandlerThread("Night-loop screen");
+            thread.Start();
+            lock (_gate) _thread = thread;
+            reader.SetOnImageAvailableListener(new Fresh(reader), new global::Android.OS.Handler(thread.Looper!));
             display = projection.CreateVirtualDisplay("Night-loop", w0, h0, (int)metrics.DensityDpi,
                 (global::Android.Views.DisplayFlags)(int)VirtualDisplayFlags.AutoMirror, reader.Surface, null, null);
         }
@@ -54,6 +63,7 @@ internal sealed class ScreenCapture : IScreenCapture
             // Some phones and emulators refuse screen capture; screen reading just stays off instead of crashing.
             reader?.Close();
             try { projection?.Stop(); } catch (Java.Lang.Exception) { }
+            lock (_gate) EndThread();
             return;
         }
         var (w, h) = (reader.Width, reader.Height);
@@ -73,7 +83,9 @@ internal sealed class ScreenCapture : IScreenCapture
         lock (_gate)
         {
             _display?.Release();
+            DropLatest();
             _reader?.Close();
+            EndThread();
             try { _projection?.Stop(); } catch (Java.Lang.Exception) { }
             _display = null;
             _reader = null;
@@ -94,12 +106,47 @@ internal sealed class ScreenCapture : IScreenCapture
         }
     }
 
-    /// <summary>Copies the newest frame (RGBA with row padding) into a BGRA array.</summary>
+    private void DropLatest()
+    {
+        try { _latest?.Close(); } catch (Java.Lang.Exception) { }
+        _latest = null;
+    }
+
+    private void EndThread()
+    {
+        _thread?.QuitSafely();
+        _thread = null;
+    }
+
+    /// <summary>Takes each picture as soon as Android sends it, so the screen copy never falls behind.</summary>
+    private sealed class Fresh(ImageReader mine) : Java.Lang.Object, ImageReader.IOnImageAvailableListener
+    {
+        public void OnImageAvailable(ImageReader? reader)
+        {
+            lock (Instance._gate)
+            {
+                global::Android.Media.Image? image;
+                try { image = mine.AcquireLatestImage(); }
+                catch (Java.Lang.Exception) { return; } // this capture already ended
+                if (image is null) return;
+                // A picture from an older capture is dropped. One that comes before Start has handed this reader
+                // over is kept: a still screen may not send another.
+                if (Instance._reader is { } now && !ReferenceEquals(now, mine))
+                {
+                    image.Close();
+                    return;
+                }
+                Instance.DropLatest();
+                Instance._latest = image;
+            }
+        }
+    }
+
+    /// <summary>Copies the newest picture (RGBA with row padding) into a BGRA array. No new picture = the screen hasn't changed.</summary>
     private void Grab()
     {
-        global::Android.Media.Image? image;
-        try { image = _reader!.AcquireLatestImage(); }
-        catch (Java.Lang.Exception) { return; }
+        var image = _latest;
+        _latest = null;
         using var _ = image;
         if (image is null) return;
         var plane = image.GetPlanes()![0];
@@ -153,7 +200,9 @@ internal sealed class ScreenCapture : IScreenCapture
                 // An older capture ending must not switch off the one that replaced it.
                 if (!ReferenceEquals(Instance._projection, mine)) return;
                 Instance._display?.Release();
+                Instance.DropLatest();
                 Instance._reader?.Close();
+                Instance.EndThread();
                 Instance._display = null;
                 Instance._reader = null;
                 Instance._projection = null;
@@ -186,7 +235,12 @@ public sealed class ScreenConsentActivity : Activity
     {
         base.OnCreate(savedInstanceState);
         var manager = (MediaProjectionManager)GetSystemService(MediaProjectionService)!;
-        StartActivityForResult(manager.CreateScreenCaptureIntent(), RequestCode);
+        // Android 14+: only offer "entire screen". Sharing one app hides the game whenever another app (or the
+        // game restarting) is in front, and the blocks would look at an old picture.
+        var ask = OperatingSystem.IsAndroidVersionAtLeast(34)
+            ? manager.CreateScreenCaptureIntent(MediaProjectionConfig.CreateConfigForDefaultDisplay())
+            : manager.CreateScreenCaptureIntent();
+        StartActivityForResult(ask, RequestCode);
     }
 
     protected override void OnActivityResult(int requestCode, [GeneratedEnum] Result resultCode, Intent? data)

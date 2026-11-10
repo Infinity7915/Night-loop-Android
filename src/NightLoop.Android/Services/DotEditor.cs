@@ -720,7 +720,7 @@ internal sealed class DotEditor
         top.AddView(Ui.Small(C, "⊕", ShowAddMenu, "Add a step"));
         top.AddView(Ui.Small(C, "✕", CloseList, "Close the list"));
         panel.AddView(top);
-        panel.AddView(Ui.Text(C, "Tap a step to change it. ↑ ↓ move it. Hold it to copy, switch off or delete.", 12, Palette.TextQuiet));
+        panel.AddView(Ui.Text(C, "Tap a step to pick it, double tap to change it. ↑ ↓ move it. Hold it to copy, switch off or delete.", 12, Palette.TextQuiet));
         var rows = Ui.Column(C, 0);
         rows.Tag = "rows";
         var scroll = new ScrollView(C);
@@ -769,6 +769,12 @@ internal sealed class DotEditor
             row.Click += (_, _) =>
             {
                 if (_isPlaying) return; // the list just follows along while a macro plays
+                // One tap only picks the step (↑ ↓ and new steps use it); a double tap opens its settings.
+                if (!IsDoubleTap(step))
+                {
+                    PickInList(step);
+                    return;
+                }
                 CloseList();
                 Select(step);
             };
@@ -777,6 +783,34 @@ internal sealed class DotEditor
             _listRows.Add(row);
             if (type is BlockTypes.If or BlockTypes.Loop or BlockTypes.RepeatUntil or BlockTypes.Else) depth++;
         }
+    }
+
+    private Step? _lastTapStep;
+    private long _lastTapAt;
+
+    /// <summary>Whether this tap is the second quick tap on the same step (a double tap opens its settings).</summary>
+    private bool IsDoubleTap(Step step)
+    {
+        var now = global::Android.OS.SystemClock.UptimeMillis();
+        var twice = ReferenceEquals(_lastTapStep, step) && now - _lastTapAt <= DoubleTapMs;
+        (_lastTapStep, _lastTapAt) = twice ? (null, 0) : (step, now);
+        return twice;
+    }
+
+    private const long DoubleTapMs = 400;
+
+    /// <summary>A single tap on a ☰ row: highlight it in place (the list stays open and keeps its scroll).</summary>
+    private void PickInList(Step step)
+    {
+        var before = _selected;
+        _selected = step;
+        foreach (var s in new[] { before, step })
+        {
+            if (s is null) continue;
+            Paint(s);
+            if (_steps.IndexOf(s) is var i and >= 0 && i < _listRows.Count) PaintRow(_listRows[i], s);
+        }
+        ShowStatus();
     }
 
     private void PaintRow(View row, Step step)
@@ -1356,7 +1390,7 @@ internal sealed class DotEditor
         Closed?.Invoke();
     }
 
-    /// <summary>Drags a step (or the toolbar). A touch that hardly moves is a tap: it opens the step's settings.</summary>
+    /// <summary>Drags a step (or the toolbar). A touch that hardly moves is a tap: it highlights the step; a double tap or a hold opens its settings.</summary>
     private sealed class Drag(DotEditor editor, WindowManagerLayoutParams layout, Step? step, bool end, View? window = null) : Java.Lang.Object, View.IOnTouchListener
     {
         private float _downX, _downY;
@@ -1412,7 +1446,12 @@ internal sealed class DotEditor
                         // A chip's place isn't part of the macro: keep it on this phone so it comes back there.
                         else if (step.Id is { Length: > 0 } id) Core.LocalSettings.SaveChipSpot(editor._id, id, layout.X, layout.Y);
                     }
-                    else if (!_opened) editor.Highlight(step);
+                    // A quick tap highlights the step; a second quick tap on it opens its settings.
+                    else if (!_opened)
+                    {
+                        if (editor.IsDoubleTap(step)) editor.Select(step);
+                        else editor.Highlight(step);
+                    }
                     return true;
             }
             return false;
