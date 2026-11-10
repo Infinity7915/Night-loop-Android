@@ -23,6 +23,8 @@ internal sealed record AppField(string Key, string Label) : Field(Key, Label);
 internal sealed record MacroField(string Key, string Label) : Field(Key, Label);
 /// <summary>A picture to look for: drag a box on the screen (stored as imageData).</summary>
 internal sealed record PictureField() : Field("imageData", "Picture");
+/// <summary>Where to tap once the picture is found: inside it or beside it, picked on the screen (clickXPct / clickYPct).</summary>
+internal sealed record TapSpotField() : Field(BlockTypes.ClickXKey, "Tap spot (when it taps)");
 /// <summary>A point and its color, picked by touching the screen (x, y, color).</summary>
 internal sealed record PixelField() : Field("color", "Spot and color");
 /// <summary>If / Repeat until: app in front, text / picture on screen, or a pixel's color (or NOT).</summary>
@@ -51,13 +53,15 @@ internal static class BlockKinds
 
     private static readonly (string, string)[] Targets = [("image", "A picture"), ("text", "Text")];
     private static readonly (string, string)[] WhenFound = [("none", "Just go on"), ("tap", "Tap it, then go on")];
-    private static Field[] Tapping(Field[] fields) => [.. fields, new ChoiceField("whenFound", "When found", WhenFound)];
+    private static Field[] Tapping(Field[] fields) => [.. fields, new ChoiceField("whenFound", "When found", WhenFound), new TapSpotField()];
+
+    private static BoolField AverageColors => new(BlockTypes.AverageColorsKey, "Also match dimmer or brighter copies (with Match colors)", false);
 
     private static Field[] PictureFields =>
     [
         new PictureField(), new IntField("confidencePct", "Confidence % (1–100)", "90"),
         new IntField("sizeTolerancePct", "Size tolerance % (blank = automatic)", "auto"),
-        new BoolField("matchColor", "Match colors", true),
+        new BoolField("matchColor", "Match colors", true), AverageColors,
         new TimeoutField("timeoutMs", "Give up after (ms, blank = Infinite)"),
         new ChoiceField("onFail", "If it gives up", OnFails), new TextField("failLabel", "Label to go to (for Go to a label)"),
     ];
@@ -93,9 +97,9 @@ internal static class BlockKinds
                           ["target"] = "image", ["confidencePct"] = 90, ["maxTurns"] = 12, ["whenFound"] = "none" },
             [new SpotField("from", "Swipe start"), new SpotField("to", "Swipe end"), new IntField("durationMs", "Swipe time (ms)", "300"),
              new ChoiceField("target", "Look for", Targets), new PictureField(), new TextField("value", "Text to look for (when looking for text)"),
-             new IntField("confidencePct", "Confidence % (1–100)", "90"), new BoolField("matchColor", "Match colors", true),
+             new IntField("confidencePct", "Confidence % (1–100)", "90"), new BoolField("matchColor", "Match colors", true), AverageColors,
              new IntField("maxTurns", "Most swipes before giving up", "12"),
-             new ChoiceField("whenFound", "When found", WhenFound),
+             new ChoiceField("whenFound", "When found", WhenFound), new TapSpotField(),
              new ChoiceField("onFail", "If it gives up", OnFails), new TextField("failLabel", "Label to go to (for Go to a label)")],
             b => $"Swipe until {Looking(b)} shows{Tap(b)}"),
         new(BlockTypes.WalkTo, "Walk to picture", "Touch",
@@ -103,11 +107,11 @@ internal static class BlockKinds
                           ["target"] = "image", ["confidencePct"] = 90, ["tolerancePx"] = 200, ["timeoutMs"] = 30_000, ["whenFound"] = "none" },
             [new SpotField("from", "Joystick middle"), new SpotField("to", "Joystick pushed forward"),
              new ChoiceField("target", "Walk to", Targets), new PictureField(), new TextField("value", "Text to walk to (when walking to text)"),
-             new IntField("confidencePct", "Confidence % (1–100)", "90"), new BoolField("matchColor", "Match colors", true),
+             new IntField("confidencePct", "Confidence % (1–100)", "90"), new BoolField("matchColor", "Match colors", true), AverageColors,
              new IntField("tolerancePx", "Arrived when it's this close to the middle of the screen (px)", "200"),
              new ConditionField(Optional: true, Title: "Or stop walking when"),
              new TimeoutField("timeoutMs", "Give up after (ms, blank = Infinite)"),
-             new ChoiceField("whenFound", "When there", [("none", "Just go on"), ("tap", "Tap it, then go on")]),
+             new ChoiceField("whenFound", "When there", [("none", "Just go on"), ("tap", "Tap it, then go on")]), new TapSpotField(),
              new ChoiceField("onFail", "If it gives up", OnFails), new TextField("failLabel", "Label to go to (for Go to a label)")],
             b => $"Walk to {Looking(b)}{Tap(b)}"),
         new(BlockTypes.DeviceButton, "Phone button", "Touch", () => new() { ["button"] = "back" },
