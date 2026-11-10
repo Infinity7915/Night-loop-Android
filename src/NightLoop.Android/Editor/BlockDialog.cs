@@ -390,10 +390,13 @@ internal static class BlockDialog
                     var size = Ui.Number(a, "Size tolerance % (blank = automatic)", (inner["sizeTolerancePct"] as JsonValue)?.TryGetValue(out int sp) == true ? sp : null);
                     var color = new CheckBox(a) { Text = "Match colors", Checked = !((inner["matchColor"] as JsonValue)?.TryGetValue(out bool mc) == true && !mc) };
                     color.SetTextColor(Palette.Text);
-                    var dimmer = Ui.Number(a, $"Brightness range % ({Brightness.DefaultPct})", int.TryParse(Brightness.Shown(inner), out var bp) ? bp : null);
+                    var average = new CheckBox(a) { Text = "Average colors (any dimmer or brighter copy)", Checked = (inner[BlockTypes.AverageColorsKey] as JsonValue)?.TryGetValue(out bool av) == true && av };
+                    average.SetTextColor(Palette.Text);
+                    var dimmer = Ui.Number(a, $"Brightness range % when not averaging ({Brightness.DefaultPct})", int.TryParse(Brightness.Shown(inner), out var bp) ? bp : null);
                     details.AddView(conf);
                     details.AddView(size);
                     details.AddView(color);
+                    details.AddView(average);
                     details.AddView(dimmer);
                     read = () =>
                     {
@@ -402,6 +405,7 @@ internal static class BlockDialog
                         if (int.TryParse(conf.Text, out var cv)) o["confidencePct"] = cv;
                         if (int.TryParse(size.Text, out var sv)) o["sizeTolerancePct"] = sv;
                         if (!color.Checked) o["matchColor"] = false;
+                        if (average.Checked) o[BlockTypes.AverageColorsKey] = true;
                         Brightness.Write(o, int.TryParse((dimmer.Text ?? "").Trim(), out var bv) ? bv : null);
                         return o;
                     };
