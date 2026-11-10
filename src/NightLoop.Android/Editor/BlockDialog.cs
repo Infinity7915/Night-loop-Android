@@ -256,6 +256,32 @@ internal static class BlockDialog
                 }, primary: false));
                 break;
             }
+            case TapSpotField:
+            {
+                var (sx, sy) = ClickSpot.Read(copy);
+                body.AddView(Ui.Text(a, ClickSpot.Describe(sx, sy, "Taps") + ".", 14, Palette.Text));
+                var row = Ui.Row(a);
+                row.AddView(Ui.Fill(Ui.Button(a, "Pick tap spot on screen", () =>
+                {
+                    foreach (var w in apply) w();
+                    if (copy.GetString("imageData") is not { Length: > 0 })
+                    {
+                        Ui.Toast(a, "Pick the picture first.");
+                        return;
+                    }
+                    Current?.Dismiss();
+                    PickTapSpot(a, copy, () => Show(a, copy, isNew, done));
+                }, primary: false)));
+                row.AddView(Ui.Button(a, "Middle", () =>
+                {
+                    foreach (var w in apply) w();
+                    ClickSpot.Write(copy, 0.5, 0.5);
+                    Current?.Dismiss();
+                    Show(a, copy, isNew, done);
+                }, primary: false));
+                body.AddView(row);
+                break;
+            }
             case PixelField:
             {
                 body.AddView(Ui.Text(a, $"{copy.GetInt("x", 0)}, {copy.GetInt("y", 0)} · {copy.GetString("color", "#FFFFFF")}", 14, Palette.Text));
@@ -357,9 +383,12 @@ internal static class BlockDialog
                     var size = Ui.Number(a, "Size tolerance % (blank = automatic)", (inner["sizeTolerancePct"] as JsonValue)?.TryGetValue(out int sp) == true ? sp : null);
                     var color = new CheckBox(a) { Text = "Match colors", Checked = !((inner["matchColor"] as JsonValue)?.TryGetValue(out bool mc) == true && !mc) };
                     color.SetTextColor(Palette.Text);
+                    var dimmer = new CheckBox(a) { Text = "Also match dimmer or brighter copies", Checked = (inner[BlockTypes.AverageColorsKey] as JsonValue)?.TryGetValue(out bool av) == true && av };
+                    dimmer.SetTextColor(Palette.Text);
                     details.AddView(conf);
                     details.AddView(size);
                     details.AddView(color);
+                    details.AddView(dimmer);
                     read = () =>
                     {
                         var o = new JsonObject { ["kind"] = "imageVisible" };
@@ -367,6 +396,7 @@ internal static class BlockDialog
                         if (int.TryParse(conf.Text, out var cv)) o["confidencePct"] = cv;
                         if (int.TryParse(size.Text, out var sv)) o["sizeTolerancePct"] = sv;
                         if (!color.Checked) o["matchColor"] = false;
+                        if (dimmer.Checked) o[BlockTypes.AverageColorsKey] = true;
                         return o;
                     };
                     details.AddView(Ui.Button(a, "Pick picture on screen", () =>
@@ -445,6 +475,41 @@ internal static class BlockDialog
     }
 
     /// <summary>Drag a box on the screen; the picture inside becomes the block's saved picture (null if cancelled).</summary>
+    /// <summary>
+    /// "Pick tap spot on screen": with the picture showing, touch where to tap (on it or beside it). The spot is saved
+    /// relative to the picture, so it follows the picture wherever it is found later.
+    /// </summary>
+    private static void PickTapSpot(Context a, Block copy, Action back)
+    {
+        if (!Core.ScreenCapture.Ready)
+        {
+            Core.ScreenConsentActivity.Ask(a);
+            Ui.Toast(a, "Tap \"Start now\" so Night-loop can see the screen, then pick the spot again.");
+            back();
+            return;
+        }
+        ScreenPicker.Pick(a, ["Touch where to tap once the picture is found (it must be on screen now)"], picked => AfterOverlaysHide(() =>
+        {
+            try
+            {
+                var (_, _, w, h) = Core.ScreenCapture.Instance.Desktop;
+                var shot = Core.ScreenCapture.Instance.Capture(0, 0, w, h);
+                var spot = NightLoop.Engine.Blocks.DetectProbe.SpotFromScreen(copy, shot, picked[0].X, picked[0].Y);
+                if (spot.Ok)
+                {
+                    var (px, py) = ClickSpot.Write(copy, spot.X, spot.Y);
+                    Ui.Toast(a, ClickSpot.Describe(px / 100.0, py / 100.0, "Taps") + " once it is found.");
+                }
+                else Ui.Toast(a, spot.Message);
+            }
+            catch (Exception ex)
+            {
+                Ui.Toast(a, $"Couldn't look at the screen: {ex.Message}");
+            }
+            back();
+        }));
+    }
+
     private static void PickPicture(Context a, Action<string?> got)
     {
         if (!Core.ScreenCapture.Ready)
