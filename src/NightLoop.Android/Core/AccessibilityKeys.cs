@@ -16,11 +16,22 @@ internal sealed class AccessibilityKeys : IInputSender
     {
         if (!OperatingSystem.IsAndroidVersionAtLeast(33))
             throw new MacroFaultException("Typing and keys need Android 13 or newer.");
-        var service = NightLoopAccessibilityService.Current
-            ?? throw new MacroFaultException("Night-loop's accessibility service is off. Turn it on in Night-loop's Set up.");
-        return service.InputMethod?.CurrentInputConnection
-            ?? throw new MacroFaultException("No text box is selected, so there's nowhere to type. Tap a text box first (a Tap step works).");
+        if (NightLoopAccessibilityService.Current is null)
+            throw new MacroFaultException("Night-loop's accessibility service is off. Turn it on in Night-loop's Set up.");
+        // A text box tapped just before (by a Tap step or a picture step's tap when found) takes a moment to get
+        // the keyboard, longer in games. Give it a few seconds before saying there's nowhere to type.
+        var until = Environment.TickCount64 + TextBoxWaitMs;
+        while (true)
+        {
+            if (NightLoopAccessibilityService.Current?.InputMethod?.CurrentInputConnection is { } connection) return connection;
+            if (Environment.TickCount64 >= until)
+                throw new MacroFaultException($"No text box was selected within {TextBoxWaitMs / 1000} seconds, so there's nowhere to type. Tap the text box first (a Tap step works).");
+            Thread.Sleep(100);
+        }
     }
+
+    /// <summary>How long Type and Key wait for a text box to be selected.</summary>
+    private const int TextBoxWaitMs = 5000;
 
     private static Android.AccessibilityServices.InputMethod.AccessibilityInputConnection? UpConnection() =>
         OperatingSystem.IsAndroidVersionAtLeast(33) ? NightLoopAccessibilityService.Current?.InputMethod?.CurrentInputConnection : null;
