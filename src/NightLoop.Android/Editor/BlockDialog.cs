@@ -251,6 +251,7 @@ internal static class BlockDialog
             {
                 var preview = Ui.Text(a, copy.GetString("imageData") is { Length: > 0 } ? "Picture saved. Pick again to change it." : "No picture yet.", 14, Palette.TextQuiet);
                 body.AddView(preview);
+                if (Preview(a, copy.GetString("imageData")) is { } shown) body.AddView(shown);
                 body.AddView(Ui.Button(a, "Pick picture on screen", () =>
                 {
                     foreach (var w in apply) w();
@@ -386,6 +387,7 @@ internal static class BlockDialog
                 {
                     var has = BlockKinds.Str(inner["imageData"]) is { Length: > 0 };
                     details.AddView(Ui.Text(a, has ? "Picture saved." : "No picture yet.", 14, Palette.TextQuiet));
+                    if (Preview(a, BlockKinds.Str(inner["imageData"])) is { } shown) details.AddView(shown);
                     var conf = Ui.Number(a, "Confidence % (90)", (inner["confidencePct"] as JsonValue)?.TryGetValue(out int cp) == true ? cp : null);
                     var size = Ui.Number(a, "Size tolerance % (blank = automatic)", (inner["sizeTolerancePct"] as JsonValue)?.TryGetValue(out int sp) == true ? sp : null);
                     var color = new CheckBox(a) { Text = "Match colors", Checked = !((inner["matchColor"] as JsonValue)?.TryGetValue(out bool mc) == true && !mc) };
@@ -534,7 +536,15 @@ internal static class BlockDialog
             try
             {
                 var (image, scale) = Shrink(Core.ScreenCapture.Instance.Capture(r.Left, r.Top, r.Width, r.Height));
-                got(NightLoop.Engine.Screen.ImageTemplate.FromImage(image, scale).Encode());
+                var picked = NightLoop.Engine.Screen.ImageTemplate.FromImage(image, scale);
+                if (picked.IsPlain)
+                {
+                    // One plain color matches any plain screen (a white loading screen passed Wait for picture).
+                    Ui.Toast(a, "That area is all one plain color, so it would match any plain screen. Pick something with detail, like an icon or text.");
+                    got(null);
+                    return;
+                }
+                got(picked.Encode());
             }
             catch (Exception ex)
             {
@@ -542,6 +552,27 @@ internal static class BlockDialog
                 got(null);
             }
         }));
+    }
+
+    /// <summary>The saved picture, shown small in the edit window so it's clear what the step looks for.</summary>
+    private static Android.Views.View? Preview(Context a, string? data)
+    {
+        if (!NightLoop.Engine.Screen.ImageTemplate.TryDecode(data, out var t) || t is null) return null;
+        var colors = new int[t.Width * t.Height];
+        for (var i = 0; i < colors.Length; i++)
+        {
+            int g = t.Gray[i];
+            colors[i] = unchecked((int)0xFF000000) | (g << 16) | (g << 8) | g;
+        }
+        var bitmap = Android.Graphics.Bitmap.CreateBitmap(colors, t.Width, t.Height, Android.Graphics.Bitmap.Config.Argb8888!);
+        var view = new Android.Widget.ImageView(a);
+        view.SetImageBitmap(bitmap);
+        view.SetAdjustViewBounds(true);
+        view.SetScaleType(Android.Widget.ImageView.ScaleType.FitStart);
+        var density = a.Resources!.DisplayMetrics!.Density;
+        view.SetMaxHeight((int)(120 * density));
+        view.SetPadding(0, (int)(6 * density), 0, (int)(6 * density));
+        return view;
     }
 
     /// <summary>
