@@ -70,7 +70,7 @@ public sealed class EditorActivity : Activity
         var repeat = Ui.Row(this);
         repeat.SetPadding(0, Palette.Dp(this, 8), 0, 0);
         repeat.AddView(Ui.Text(this, "Repeat the macro (times, blank = Infinite)  ", 14, Palette.TextQuiet));
-        _repeat = Ui.Number(this, "Infinite", null);
+        _repeat = Ui.NumberOrInfinite(this, "Infinite", null);
         _repeat.FocusChange += (_, e) =>
         {
             if (!e.HasFocus) ApplyRepeat();
@@ -226,7 +226,7 @@ public sealed class EditorActivity : Activity
     private void ApplyRepeat()
     {
         if (_autosaver is null) return;
-        var repeat = int.TryParse(_repeat.Text, out var n) && n > 0
+        var repeat = int.TryParse((_repeat.Text ?? "").Trim(), out var n) && n > 0
             ? new RepeatOptions { Mode = RepeatModes.Count, Count = Math.Min(n, MacroLimits.CountMax) }
             : new RepeatOptions { Mode = RepeatModes.Forever, Count = null };
         var old = _doc.Options.Repeat;

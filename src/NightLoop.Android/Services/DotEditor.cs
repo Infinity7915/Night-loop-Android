@@ -973,12 +973,12 @@ internal sealed class DotEditor
         var name = Ui.Input(C, "Name", _name);
         card.AddView(name);
         card.AddView(Ui.Text(C, "Play it how many times? (blank = Infinite)", 13, Palette.TextQuiet));
-        var times = Ui.Number(C, "Infinite", _doc.Options.Repeat.Mode == RepeatModes.Forever ? null : _doc.Options.Repeat.Count ?? 1);
+        var times = Ui.NumberOrInfinite(C, "Infinite", _doc.Options.Repeat.Mode == RepeatModes.Forever ? null : _doc.Options.Repeat.Count ?? 1);
         card.AddView(times);
         var buttons = Ui.Row(C);
         buttons.AddView(Ui.Button(C, "Done", () =>
         {
-            _doc.Options.Repeat = int.TryParse(times.Text, out var n) && n > 0
+            _doc.Options.Repeat = int.TryParse((times.Text ?? "").Trim(), out var n) && n > 0
                 ? new RepeatOptions { Mode = RepeatModes.Count, Count = Math.Min(n, MacroLimits.CountMax) }
                 : new RepeatOptions { Mode = RepeatModes.Forever, Count = null };
             var newName = name.Text?.Trim() ?? "";
