@@ -52,9 +52,20 @@ internal sealed class AccessibilityTouch : ITouchSender
         var intent = service.PackageManager?.GetLaunchIntentForPackage(package);
         if (intent is null) return false;
         intent.AddFlags(ActivityFlags.NewTask | ActivityFlags.ResetTaskIfNeeded);
-        Night.OnMain(() => service.StartActivity(intent));
+        var before = NightLoopAccessibilityService.AppWindows;
+        Night.OnMain(() =>
+        {
+            try { service.StartActivity(intent); }
+            catch (Java.Lang.Exception) { } // "Wait for app" then says it didn't come to the front
+        });
+        // An app that is already in front doesn't change when it's opened again, and Android reports nothing, so
+        // the wait after Open app never ended. No app window at all for a few seconds means it was in front.
+        Night.MainHandler.PostDelayed(() => NightLoopAccessibilityService.AlreadyInFront(package, before), AlreadyInFrontMs);
         return true;
     }
+
+    /// <summary>How long Open app waits for any app's window before taking it that the app was already in front.</summary>
+    private const int AlreadyInFrontMs = 2500;
 
     /// <summary>
     /// One gesture at a time across every running macro: Android cancels a gesture in progress when another one
