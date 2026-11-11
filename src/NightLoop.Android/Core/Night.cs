@@ -17,7 +17,7 @@ internal static class Night
 {
     public const string ServerUrl = "https://api.night-loop.win/v1/";
 
-    private static readonly Handler MainHandler = new(Looper.MainLooper!);
+    internal static readonly Handler MainHandler = new(Looper.MainLooper!);
     private static readonly Dictionary<Guid, MacroRun> RunsById = [];
     private static Context _app = null!;
     private static bool _started;

@@ -535,8 +535,8 @@ internal static class BlockDialog
         {
             try
             {
-                var (image, scale) = Shrink(Core.ScreenCapture.Instance.Capture(r.Left, r.Top, r.Width, r.Height));
-                var picked = NightLoop.Engine.Screen.ImageTemplate.FromImage(image, scale);
+                // Boxes bigger than 200 px are shrunk to fit and remember their exact size on screen.
+                var picked = NightLoop.Engine.Screen.ImageTemplate.FromBox(Core.ScreenCapture.Instance.Capture(r.Left, r.Top, r.Width, r.Height));
                 if (picked.IsPlain)
                 {
                     // One plain color matches any plain screen (a white loading screen passed Wait for picture).
@@ -573,19 +573,6 @@ internal static class BlockDialog
         view.SetMaxHeight((int)(120 * density));
         view.SetPadding(0, (int)(6 * density), 0, (int)(6 * density));
         return view;
-    }
-
-    /// <summary>
-    /// Pictures are at most 200 px a side; bigger boxes are scaled down the same way the matcher scales the screen,
-    /// and the picture remembers by how much so it's looked for at the size it really is on screen.
-    /// </summary>
-    private static (NightLoop.Engine.Screen.ScreenImage Image, double Scale) Shrink(NightLoop.Engine.Screen.ScreenImage image)
-    {
-        var max = NightLoop.Engine.Screen.ImageTemplate.MaxSide;
-        if (image.Width <= max && image.Height <= max) return (image, 1);
-        var by = Math.Max((double)image.Width / max, (double)image.Height / max);
-        var small = NightLoop.Engine.Screen.TemplateMatcher.Shrunk(image, by);
-        return (small, (double)image.Width / small.Width);
     }
 
     /// <summary>
