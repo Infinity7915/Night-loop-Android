@@ -71,8 +71,9 @@ public sealed class BubbleService : Service
     public override void OnDestroy()
     {
         Night.RunsChanged -= OnRunsChanged;
-        Night.MacrosChanged -= FillPanel;
+        Night.MacrosChanged -= MacrosChanged;
         _editor?.Dismiss();
+        _quick?.RemoveAll();
         ClosePanel();
         Core.Overlays.Untrack(_bubble);
         if (_bubble is not null) _windows?.RemoveView(_bubble);
@@ -135,8 +136,10 @@ public sealed class BubbleService : Service
         Core.Overlays.Track(bubble, layout, _windows);
         _bubble = bubble;
         _bubbleLayout = layout;
+        _quick = new QuickButtons(this, _windows);
+        if (Night.Session.IsSignedIn && LocalSettings.QuickActions.Count > 0) _ = RefreshAsync();
         Night.RunsChanged += OnRunsChanged;
-        Night.MacrosChanged += FillPanel;
+        Night.MacrosChanged += MacrosChanged;
         OnRunsChanged();
     }
 
@@ -149,6 +152,15 @@ public sealed class BubbleService : Service
             bubble.Background = Night.AnyRunning ? Ui.Rounded(this, Color.Transparent, 28, Palette.Good) : null;
             if (Night.AnyRunning && bubble.Background is GradientDrawable ring) ring.SetStroke(Palette.Dp(this, 3), Palette.Good);
         }
+        _quick?.Refresh();
+        FillPanel();
+    }
+
+    private QuickButtons? _quick;
+
+    private void MacrosChanged()
+    {
+        _quick?.Refresh();
         FillPanel();
     }
 
@@ -225,6 +237,17 @@ public sealed class BubbleService : Service
                 ? Ui.Small(this, "■", () => Night.Stop(id), $"Stop {macro.Name}")
                 : Ui.Small(this, "▶", () => _ = ShowStepsAsync(id), $"Show {macro.Name}'s steps"));
             _panelList.AddView(row);
+            // Quick action: a button stays on screen that plays this macro when tapped (and stops it when tapped again).
+            var quick = new global::Android.Widget.Switch(this) { Text = "Quick action: play button on screen", Checked = LocalSettings.IsQuickAction(id) };
+            quick.SetTextColor(Palette.TextQuiet);
+            quick.SetTextSize(global::Android.Util.ComplexUnitType.Sp, 12);
+            quick.CheckedChange += (_, e) =>
+            {
+                LocalSettings.SetQuickAction(id, e.IsChecked);
+                _quick?.Refresh();
+                if (e.IsChecked) Ui.Toast(this, $"Tap the ⚡ {macro.Name} button to play it, tap again to stop. Drag it anywhere.");
+            };
+            _panelList.AddView(quick);
         }
         _panelList.AddView(Switch("Hide dots while playing", LocalSettings.HideDotsWhilePlaying, on => LocalSettings.HideDotsWhilePlaying = on));
         _panelList.AddView(Switch("Hide play bar while playing", LocalSettings.HidePlayBarWhilePlaying, on => LocalSettings.HidePlayBarWhilePlaying = on));
