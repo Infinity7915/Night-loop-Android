@@ -102,4 +102,26 @@ internal static class LocalSettings
         get => Math.Clamp(_prefs?.GetInt("wait_after_blocks_ms", 0) ?? 0, 0, WaitAfterMaxMs);
         set { _prefs?.Edit()!.PutInt("wait_after_blocks_ms", Math.Clamp(value, 0, WaitAfterMaxMs))!.Apply(); Night.Waits.AfterBlocksMs = value; }
     }
+
+    /// <summary>Bubble switch per macro: macros with a quick-action button on screen (tap it to play or stop).</summary>
+    public static IReadOnlyList<Guid> QuickActions =>
+        (_prefs?.GetString("quick_actions", "") ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries)
+            .Select(t => Guid.TryParse(t, out var g) ? g : Guid.Empty).Where(g => g != Guid.Empty).Distinct().ToList();
+
+    public static bool IsQuickAction(Guid macro) => QuickActions.Contains(macro);
+
+    public static void SetQuickAction(Guid macro, bool on)
+    {
+        var list = QuickActions.Where(g => g != macro).ToList();
+        if (on) list.Add(macro);
+        _prefs?.Edit()!.PutString("quick_actions", string.Join(",", list.Select(g => g.ToString("N"))))!.Apply();
+    }
+
+    /// <summary>Where a quick-action button was last left on screen.</summary>
+    public static (int X, int Y)? QuickSpot(Guid macro) =>
+        _prefs?.GetString($"quick_{macro:N}", null) is { } s && s.Split(',') is [var a, var b]
+            && int.TryParse(a, out var x) && int.TryParse(b, out var y) ? (x, y) : null;
+
+    public static void SaveQuickSpot(Guid macro, int x, int y) =>
+        _prefs?.Edit()!.PutString($"quick_{macro:N}", $"{x},{y}")!.Apply();
 }

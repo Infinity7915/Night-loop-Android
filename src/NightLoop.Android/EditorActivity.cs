@@ -106,7 +106,33 @@ public sealed class EditorActivity : Activity
         GoHome();
     }
 
-        protected override void OnPause()
+    private bool _shownOnce;
+
+    /// <summary>
+    /// Coming back to this screen (from the game or the bubble's steps): load the macro again when nothing here is
+    /// waiting to be saved. The bubble may have changed it meanwhile (a new picture, say); this screen's older copy
+    /// then went up with the next change here and put the old picture back.
+    /// </summary>
+    protected override void OnResume()
+    {
+        base.OnResume();
+        if (!_shownOnce)
+        {
+            _shownOnce = true;
+            return;
+        }
+        if (_autosaver is { State: SyncState.Saved or SyncState.Draft } old && !BlockDialogOpen)
+        {
+            _autosaver = null;
+            _ = old.DisposeAsync().AsTask();
+            _ = LoadAsync();
+        }
+    }
+
+    /// <summary>A step's settings window (or a pick from it) is open: its changes come back to this copy, so don't reload.</summary>
+    private static bool BlockDialogOpen => BlockDialog.IsOpen;
+
+    protected override void OnPause()
     {
         ApplyRepeat();
         _ = FlushAsync();
