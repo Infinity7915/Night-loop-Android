@@ -18,6 +18,7 @@ internal static class BlockDialog
     /// </summary>
     public static void Show(Context context, Block block, bool isNew, Action<Block> done)
     {
+        _away = false;
         var activity = Dialogs.Themed(context);
         var kind = BlockKinds.For(block.Type);
         var copy = Copy(block);
@@ -68,7 +69,7 @@ internal static class BlockDialog
         body.AddView(Ui.Button(a, "Test on screen now", () =>
         {
             foreach (var w in apply) w();
-            Current?.Dismiss();
+            StepAway();
             TestOnScreen(a, copy, () => Show(a, copy, isNew, done));
         }, primary: false));
     }
@@ -105,6 +106,16 @@ internal static class BlockDialog
 
     /// <summary>The open window, so "Pick on screen" can close it while you pick.</summary>
     private static AlertDialog? Current { get; set; }
+
+    /// <summary>A settings window is open, or closed only for a pick or test and coming back.</summary>
+    public static bool IsOpen => Current?.IsShowing == true || _away;
+    private static bool _away;
+
+    private static void StepAway()
+    {
+        _away = true;
+        Current?.Dismiss();
+    }
 
     private static Block Copy(Block b) => new()
     {
@@ -209,7 +220,7 @@ internal static class BlockDialog
                 body.AddView(Ui.Button(a, "Pick on screen", () =>
                 {
                     foreach (var w in apply) w();
-                    Current?.Dismiss();
+                    StepAway();
                     var spots = copy.Type switch
                     {
                         BlockTypes.WalkTo => new[] { "Touch the middle of the joystick", "Touch where the joystick is pushed to walk forward" },
@@ -316,7 +327,7 @@ internal static class BlockDialog
                 body.AddView(Ui.Button(a, "Pick picture on screen", () =>
                 {
                     foreach (var w in apply) w();
-                    Current?.Dismiss();
+                    StepAway();
                     PickPicture(a, data =>
                     {
                         if (data is not null) p["imageData"] = data;
@@ -338,14 +349,14 @@ internal static class BlockDialog
                         Ui.Toast(a, "Pick the picture first.");
                         return;
                     }
-                    Current?.Dismiss();
+                    StepAway();
                     PickTapSpot(a, copy, () => Show(a, copy, isNew, done));
                 }, primary: false)));
                 row.AddView(Ui.Button(a, "Middle", () =>
                 {
                     foreach (var w in apply) w();
                     ClickSpot.Write(copy, 0.5, 0.5);
-                    Current?.Dismiss();
+                    StepAway();
                     Show(a, copy, isNew, done);
                 }, primary: false));
                 body.AddView(row);
@@ -357,7 +368,7 @@ internal static class BlockDialog
                 body.AddView(Ui.Button(a, "Pick spot and color on screen", () =>
                 {
                     foreach (var w in apply) w();
-                    Current?.Dismiss();
+                    StepAway();
                     PickPixel(a, picked =>
                     {
                         if (picked is { } px)
@@ -475,7 +486,7 @@ internal static class BlockDialog
                     details.AddView(Ui.Button(a, "Pick picture on screen", () =>
                     {
                         Save();
-                        Current?.Dismiss();
+                        StepAway();
                         PickPicture(a, data =>
                         {
                             if (data is not null && copy.GetObject("condition") is { } saved)
@@ -506,7 +517,7 @@ internal static class BlockDialog
                     details.AddView(Ui.Button(a, "Pick spot and color on screen", () =>
                     {
                         Save();
-                        Current?.Dismiss();
+                        StepAway();
                         PickPixel(a, picked =>
                         {
                             if (picked is { } px && copy.GetObject("condition") is { } saved)
@@ -605,7 +616,15 @@ internal static class BlockDialog
                     got(null);
                     return;
                 }
-                got(picked.Encode());
+                var data = picked.Encode();
+                if (data.Length > MacroLimits.ImageDataMaxLength)
+                {
+                    // The server refuses the whole macro with a picture this big, so the change would never be saved.
+                    Ui.Toast(a, "That picture is too detailed to save. Drag a smaller box around it.");
+                    got(null);
+                    return;
+                }
+                got(data);
             }
             catch (Exception ex)
             {

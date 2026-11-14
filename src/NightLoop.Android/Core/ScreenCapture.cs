@@ -222,8 +222,22 @@ internal sealed class ScreenCapture : IScreenCapture
     {
         var image = _latest;
         _latest = null;
-        using var _ = image;
         if (image is null) return;
+        // Close() hands the frame back to Android. Dispose alone (a "using") only lets go of the C# side: the frame
+        // stayed taken, and after 3 of them Android had no room for new ones. The screen copy then froze on an old
+        // picture: picking took a picture of a screen from moments before (a pop-up already gone, or not yet there),
+        // and "Wait for picture" steps saw an old screen and went on at once, so a long macro ran through its steps
+        // without the game keeping up.
+        try { CopyFrame(image); }
+        finally
+        {
+            try { image.Close(); } catch (Java.Lang.Exception) { }
+            image.Dispose();
+        }
+    }
+
+    private void CopyFrame(global::Android.Media.Image image)
+    {
         var plane = image.GetPlanes()![0];
         var buffer = plane.Buffer!;
         var rowStride = plane.RowStride;

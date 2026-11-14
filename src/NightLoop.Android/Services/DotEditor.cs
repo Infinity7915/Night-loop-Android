@@ -1376,10 +1376,18 @@ internal sealed class DotEditor
         {
             if (issues.Count == 0) await Core.Saving.SaveAsync(_saver, _doc);
             else await _saver.FlushAsync();
+            // The server can refuse a draft without an exception (too big, daily block limit, a bad step). Closing
+            // then threw the change away while saying "Kept as a draft"; keep the steps open and say why instead.
+            if (_saver.State is SyncState.Error or SyncState.Conflict or SyncState.Offline)
+                throw new InvalidOperationException(_saver.Message ?? "The server didn't take the change.");
         }
         catch (Exception ex) when (ex is ApiException or ServerUnreachableException or InvalidOperationException)
         {
-            Night.OnMain(() => Ui.Toast(C, $"Not saved: {ex.Message}"));
+            Night.OnMain(() =>
+            {
+                Ui.Toast(C, $"Not saved, so the steps stay open: {ex.Message}");
+                ShowStatus();
+            });
             return;
         }
         Night.OnMain(() =>
