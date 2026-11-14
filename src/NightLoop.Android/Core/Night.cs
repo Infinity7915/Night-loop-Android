@@ -80,6 +80,18 @@ internal static class Night
         });
     }
 
+    /// <summary>
+    /// What a test look in the editor ("Test on screen now") needs: the screen, text reading and which app is in
+    /// front. A test look sends no taps or keys.
+    /// </summary>
+    public static RunEnvironment LookEnvironment() => new()
+    {
+        Input = AccessibilityKeys.Instance,
+        Touch = AccessibilityTouch.Instance,
+        Screen = ScreenCapture.Instance,
+        Text = PhoneTextReader.Instance,
+    };
+
     public static void OnMain(Action action)
     {
         if (Looper.MyLooper() == Looper.MainLooper) action();

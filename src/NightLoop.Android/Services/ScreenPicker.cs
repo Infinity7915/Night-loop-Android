@@ -13,8 +13,12 @@ namespace NightLoop.Mobile;
 /// </summary>
 internal static class ScreenPicker
 {
-    /// <summary>Asks for <paramref name="prompts"/>.Length spots, one per touch, and calls back with them on the main thread.</summary>
-    public static void Pick(Context activity, string[] prompts, Action<IReadOnlyList<(int X, int Y)>> done)
+    /// <summary>
+    /// Asks for <paramref name="prompts"/>.Length spots, one per touch, and calls back with them on the main thread.
+    /// With <paramref name="comeBack"/> off, Night-loop stays out of the way afterwards (the caller still has to look
+    /// at the screen) and the caller calls <see cref="ComeBack"/> when it is done.
+    /// </summary>
+    public static void Pick(Context activity, string[] prompts, Action<IReadOnlyList<(int X, int Y)>> done, bool comeBack = true)
     {
         var app = activity.ApplicationContext ?? activity;
         if (!Setup.Permissions.CanDrawOverlays(app))
@@ -43,9 +47,13 @@ internal static class ScreenPicker
                 return;
             }
             windows.RemoveView(layer);
-            ComeBack(activity, app);
+            if (comeBack) ComeBack(activity);
             try { done(picked); }
-            catch (Exception ex) { Ui.Toast(app, $"Couldn't pick that spot: {ex.Message}"); }
+            catch (Exception ex)
+            {
+                Ui.Toast(app, $"Couldn't pick that spot: {ex.Message}");
+                if (!comeBack) ComeBack(activity);
+            }
         };
         hint.Click += (_, _) =>
         {
@@ -67,15 +75,21 @@ internal static class ScreenPicker
         windows.AddView(layer, layout);
     }
 
-    private static void ComeBack(Context from, Context app)
+    /// <summary>
+    /// Brings Night-loop's screen back in front after it stepped aside for a pick (nothing to do from the bubble).
+    /// Call it only once the screen has been looked at: called first, the picture, color or tap spot was taken from
+    /// Night-loop's own screen sliding back in, not from the game.
+    /// </summary>
+    public static void ComeBack(Context from)
     {
         if (from is Android.App.Activity a)
-            a.StartActivity(new Intent(app, a.GetType()).AddFlags(ActivityFlags.ReorderToFront | ActivityFlags.NewTask));
+            a.StartActivity(new Intent(a.ApplicationContext ?? a, a.GetType()).AddFlags(ActivityFlags.ReorderToFront | ActivityFlags.NewTask));
     }
 
     /// <summary>
     /// Drag a box over what to look for. Calls back with the box in screen pixels once the box layer is gone, so the
-    /// picture taken afterwards shows only the screen underneath.
+    /// picture taken afterwards shows only the screen underneath. Night-loop stays out of the way: the caller calls
+    /// <see cref="ComeBack"/> once it has taken the picture.
     /// </summary>
     public static void PickBox(Context activity, string prompt, Action<(int Left, int Top, int Width, int Height)> done)
     {
@@ -135,8 +149,11 @@ internal static class ScreenPicker
                     new Android.OS.Handler(Android.OS.Looper.MainLooper!).PostDelayed(() =>
                     {
                         try { done((l, t, w, h)); }
-                        catch (Exception ex) { Ui.Toast(app, $"Couldn't take the picture: {ex.Message}"); }
-                        ComeBack(activity, app);
+                        catch (Exception ex)
+                        {
+                            Ui.Toast(app, $"Couldn't take the picture: {ex.Message}");
+                            ComeBack(activity);
+                        }
                     }, 350);
                     break;
             }

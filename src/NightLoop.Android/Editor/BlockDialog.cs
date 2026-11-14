@@ -27,19 +27,80 @@ internal static class BlockDialog
         if (kind is null)
             body.AddView(Ui.Text(activity, "This block can't be edited on Android.", 14, Palette.TextQuiet));
         else
+        {
             foreach (var field in kind.Fields)
                 AddField(activity, body, copy, field, apply, isNew, done);
+            if (NightLoop.Engine.Blocks.DetectProbe.CanTest(copy)) AddTest(activity, body, copy, apply, isNew, done);
+        }
 
         var builder = Dialogs.Builder(context)
             .SetTitle(kind?.Name ?? block.Type)!
             .SetView(Ui.Scroll(activity, body))!
             .SetPositiveButton(isNew ? "Add" : "OK", (_, _) =>
             {
+                LastTest = null;
                 foreach (var a in apply) a();
                 done(copy);
             })!
-            .SetNegativeButton("Cancel", (_, _) => { })!;
+            .SetNegativeButton("Cancel", (_, _) => LastTest = null)!;
         Current = Dialogs.Show(context, builder);
+        // Closed with Back or a touch outside: an old test result isn't shown the next time.
+        Current.CancelEvent += (_, _) => LastTest = null;
+    }
+
+    /// <summary>
+    /// What the last "Test on screen now" said, for which block and with which settings. The window closes for the
+    /// look and shows this when it opens again; once the block's settings change (a new picture, say) it no longer applies.
+    /// </summary>
+    private static (string BlockId, string Settings, string Message)? LastTest { get; set; }
+
+    /// <summary>
+    /// "Test on screen now" on the steps that look at the screen: one look, right now, the way the macro looks while it
+    /// plays, and what it saw (for a picture: how alike the best spot is, and whether its colors matched). Nothing is
+    /// tapped. It answers "why did it tap that?" on the phone itself.
+    /// </summary>
+    private static void AddTest(Context a, LinearLayout body, Block copy, List<Action> apply, bool isNew, Action<Block> done)
+    {
+        Label(a, body, "Test");
+        var said = LastTest is { } last && last.BlockId == copy.Id && last.Settings == copy.Params.ToJsonString();
+        body.AddView(Ui.Text(a, said ? LastTest!.Value.Message : "Looks at the screen once, right now, and says what it sees. Nothing is tapped.",
+            14, said ? Palette.Text : Palette.TextQuiet));
+        body.AddView(Ui.Button(a, "Test on screen now", () =>
+        {
+            foreach (var w in apply) w();
+            Current?.Dismiss();
+            TestOnScreen(a, copy, () => Show(a, copy, isNew, done));
+        }, primary: false));
+    }
+
+    private static void TestOnScreen(Context a, Block copy, Action back)
+    {
+        if (!Core.ScreenCapture.Ready)
+        {
+            Core.ScreenConsentActivity.Ask(a);
+            Ui.Toast(a, "Tap \"Start now\" so Night-loop can see the screen, then test again.");
+            back();
+            return;
+        }
+        // From the app's own editor, step aside first so the look sees the app underneath, as picking does. Night-loop's
+        // dots, chips and bubble hide for the look, as they do for a pick.
+        var activity = a as Activity;
+        activity?.MoveTaskToBack(true);
+        var hidden = Core.Overlays.HideAll();
+        Night.MainHandler.PostDelayed(() =>
+        {
+            Task.Run(() => NightLoop.Engine.Blocks.DetectProbe.LookOnceAsync(copy, Night.LookEnvironment(), null))
+                .ContinueWith(look => Night.OnMain(() =>
+                {
+                    Core.Overlays.ShowAgain(hidden);
+                    ScreenPicker.ComeBack(a);
+                    var message = look.IsCompletedSuccessfully
+                        ? look.Result.Message.Replace("use \"Capture image from screen\" on this block", "use \"Pick picture on screen\" on this step")
+                        : $"Couldn't look at the screen: {look.Exception?.GetBaseException().Message}";
+                    LastTest = (copy.Id, copy.Params.ToJsonString(), message);
+                    back();
+                }));
+        }, activity is null ? 400 : 1000);
     }
 
     /// <summary>The open window, so "Pick on screen" can close it while you pick.</summary>
@@ -486,7 +547,6 @@ internal static class BlockDialog
         apply.Add(Save);
     }
 
-    /// <summary>Drag a box on the screen; the picture inside becomes the block's saved picture (null if cancelled).</summary>
     /// <summary>
     /// "Pick tap spot on screen": with the picture showing, touch where to tap (on it or beside it). The spot is saved
     /// relative to the picture, so it follows the picture wherever it is found later.
@@ -500,7 +560,7 @@ internal static class BlockDialog
             back();
             return;
         }
-        ScreenPicker.Pick(a, ["Touch where to tap once the picture is found (it must be on screen now)"], picked => AfterOverlaysHide(() =>
+        ScreenPicker.Pick(a, ["Touch where to tap once the picture is found (it must be on screen now)"], picked => AfterOverlaysHide(a, () =>
         {
             try
             {
@@ -519,9 +579,10 @@ internal static class BlockDialog
                 Ui.Toast(a, $"Couldn't look at the screen: {ex.Message}");
             }
             back();
-        }));
+        }), comeBack: false);
     }
 
+    /// <summary>Drag a box on the screen; the picture inside becomes the block's saved picture (null if cancelled).</summary>
     private static void PickPicture(Context a, Action<string?> got)
     {
         if (!Core.ScreenCapture.Ready)
@@ -531,7 +592,7 @@ internal static class BlockDialog
             got(null);
             return;
         }
-        ScreenPicker.PickBox(a, "Drag a box around the picture", r => AfterOverlaysHide(() =>
+        ScreenPicker.PickBox(a, "Drag a box around the picture", r => AfterOverlaysHide(a, () =>
         {
             try
             {
@@ -559,10 +620,14 @@ internal static class BlockDialog
     {
         if (!NightLoop.Engine.Screen.ImageTemplate.TryDecode(data, out var t) || t is null) return null;
         var colors = new int[t.Width * t.Height];
-        for (var i = 0; i < colors.Length; i++)
+        for (var y = 0; y < t.Height; y++)
+        for (var x = 0; x < t.Width; x++)
         {
-            int g = t.Gray[i];
-            colors[i] = unchecked((int)0xFF000000) | (g << 16) | (g << 8) | g;
+            int g = t.Gray[y * t.Width + x];
+            // The picture is saved as its light and dark plus a small copy of its colors (what Match colors
+            // compares). Shown in gray only, it looked as if the colors weren't saved.
+            var (r, gr, b) = t.Rgb is null ? (g, g, g) : Tinted(t, x, y, g);
+            colors[y * t.Width + x] = unchecked((int)0xFF000000) | (r << 16) | (gr << 8) | b;
         }
         var bitmap = Android.Graphics.Bitmap.CreateBitmap(colors, t.Width, t.Height, Android.Graphics.Bitmap.Config.Argb8888!);
         var view = new Android.Widget.ImageView(a);
@@ -576,17 +641,49 @@ internal static class BlockDialog
     }
 
     /// <summary>
+    /// A pixel of the saved picture in color: its gray level, tinted with the saved color copy at that place (blended
+    /// between the copy's cells, which are far bigger than a pixel).
+    /// </summary>
+    private static (int R, int G, int B) Tinted(NightLoop.Engine.Screen.ImageTemplate t, int x, int y, int gray)
+    {
+        var rgb = t.Rgb!;
+        var fx = Math.Clamp((x + 0.5) * t.ColorWidth / t.Width - 0.5, 0, t.ColorWidth - 1);
+        var fy = Math.Clamp((y + 0.5) * t.ColorHeight / t.Height - 0.5, 0, t.ColorHeight - 1);
+        int x0 = (int)fx, y0 = (int)fy, x1 = Math.Min(t.ColorWidth - 1, x0 + 1), y1 = Math.Min(t.ColorHeight - 1, y0 + 1);
+        double ax = fx - x0, ay = fy - y0;
+        Span<double> c = stackalloc double[3];
+        for (var k = 0; k < 3; k++)
+        {
+            double top = rgb[(y0 * t.ColorWidth + x0) * 3 + k] * (1 - ax) + rgb[(y0 * t.ColorWidth + x1) * 3 + k] * ax;
+            double bottom = rgb[(y1 * t.ColorWidth + x0) * 3 + k] * (1 - ax) + rgb[(y1 * t.ColorWidth + x1) * 3 + k] * ax;
+            c[k] = top * (1 - ay) + bottom * ay;
+        }
+        // Keep the pixel's own light and dark; add how far the color there is from gray.
+        var level = (c[0] * 77 + c[1] * 150 + c[2] * 29) / 256;
+        return ((int)Math.Clamp(gray + c[0] - level, 0, 255), (int)Math.Clamp(gray + c[1] - level, 0, 255), (int)Math.Clamp(gray + c[2] - level, 0, 255));
+    }
+
+    /// <summary>
     /// Runs <paramref name="take"/> once the screen shows neither the picker nor Night-loop's own windows (dots, chips,
     /// play bar), so a saved picture or color is only the game. Taken with them in it, a picture could match the
     /// step chip itself while the macro played and the wait went on at once.
+    /// <para>
+    /// Night-loop's own screen (the editor in the app) only comes back in front after that. It used to come back
+    /// first, so a picture, color or tap spot picked from the app's editor was taken from Night-loop sliding back
+    /// in, not from the game.
+    /// </para>
     /// </summary>
-    private static void AfterOverlaysHide(Action take)
+    private static void AfterOverlaysHide(Context a, Action take)
     {
         var hidden = Core.Overlays.HideAll();
         new global::Android.OS.Handler(global::Android.OS.Looper.MainLooper!).PostDelayed(() =>
         {
             try { take(); }
-            finally { Core.Overlays.ShowAgain(hidden); }
+            finally
+            {
+                Core.Overlays.ShowAgain(hidden);
+                ScreenPicker.ComeBack(a);
+            }
         }, 400);
     }
 
@@ -603,7 +700,7 @@ internal static class BlockDialog
         ScreenPicker.Pick(a, ["Touch the spot whose color to watch"], picked =>
         {
             var (x, y) = picked[0];
-            AfterOverlaysHide(() =>
+            AfterOverlaysHide(a, () =>
             {
                 try
                 {
@@ -616,6 +713,6 @@ internal static class BlockDialog
                     got(null);
                 }
             });
-        });
+        }, comeBack: false);
     }
 }
